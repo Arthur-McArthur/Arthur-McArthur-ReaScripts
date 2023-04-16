@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="ReaScripts" commit="9be16d65304f439fffefaa86530d4dd82182926f">
+<index version="1" name="ReaScripts" commit="7572202cc567794cb0896f474fe76d0b5b165a60">
   <category name="Preset Manager">
     <reapack name="ArthurMcArthur_Preset Manager.lua" type="script" desc="Preset Manager">
       <metadata>
@@ -13,6 +13,9 @@
       </metadata>
       <version name="0.1" author="Arthur McArthur" time="2023-04-16T02:17:41Z">
         <source main="main">https://github.com/Arthur-McArthur/ReaScripts/raw/dc85e7fdc9851a7a0640ec3ee200e7a226eba0d0/Preset%20Manager/ArthurMcArthur_Preset%20Manager.lua</source>
+      </version>
+      <version name="0.11" author="Arthur McArthur" time="2023-04-16T14:13:05Z">
+        <source main="main">https://github.com/Arthur-McArthur/ReaScripts/raw/7572202cc567794cb0896f474fe76d0b5b165a60/Preset%20Manager/ArthurMcArthur_Preset%20Manager.lua</source>
       </version>
     </reapack>
   </category>
