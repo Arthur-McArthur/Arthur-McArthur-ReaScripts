@@ -5,7 +5,7 @@
 
 function print(v)
   reaper.ShowConsoleMsg("\n" .. v);
-end;
+end; 
 
 local ctx = reaper.ImGui_CreateContext("Preset Manager");
 local presetList = {}  -- Table to hold the list of presets
