@@ -1,6 +1,6 @@
 -- @description Preset Manager
 -- @author Arthur McArthur
--- @version 0.1
+-- @version 0.11
 -- @about License: GPL 3.0... thanks to cfillon and eugen27771 (RIP)
 
 function print(v)
