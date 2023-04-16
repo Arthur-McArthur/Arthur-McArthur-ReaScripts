@@ -553,7 +553,7 @@ function keyboard_shortcuts()
       if reaper.ImGui_GetKeyMods(ctx) == 4096 then ctrl = true else ctrl = false end
       if reaper.ImGui_GetKeyMods(ctx) == 16384 then alt = true else alt = false end
       if reaper.ImGui_IsKeyPressed(ctx, reaper.ImGui_Key_Delete()) then delete() end
-      if shift and reaper.ImGui_IsKeyPressed(ctx, reaper.ImGui_Key_D()) then duplicate() end
+      --if shift and reaper.ImGui_IsKeyPressed(ctx, reaper.ImGui_Key_D()) then duplicate() end
       if ctrl and reaper.ImGui_IsKeyPressed(ctx, reaper.ImGui_Key_D()) then duplicate() end
       if ctrl and reaper.ImGui_IsKeyPressed(ctx, reaper.ImGui_Key_A()) then selectAll() end
       if ctrl and reaper.ImGui_IsKeyPressed(ctx, reaper.ImGui_Key_X()) then delete() end
