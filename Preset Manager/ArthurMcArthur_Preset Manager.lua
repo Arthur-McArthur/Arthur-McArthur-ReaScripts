@@ -508,23 +508,24 @@ function saveSelectedPresetData(track, fxnum, num_presets, fx_name, track_name, 
 end
 
 function overwriteSelectedPresetData(track, fxnum, num_presets, fx_name, track_name, currentName, firstSelectedIndex)
-    -- Get the index of the first selected preset
-    local selectedIndex = nil
-    for i, selected in pairs(selectedPresets) do
-        if selected then
-            selectedIndex = i
-            break
-        end
-    end
+  -- Get the index of the first selected preset
+  local selectedIndex = nil
+  for i, selected in pairs(selectedPresets) do
+      if selected then
+          selectedIndex = i
+          break
+      end
+  end
 
-    if selectedIndex == nil then
-        return
-    end
+  if selectedIndex == nil then
+      return
+  end
 
-    -- Get the name of the selected preset
-    local selectedPresetName = presetList[selectedIndex].name
+  -- Get the name of the selected preset
+  local selectedPresetName = presetList[selectedIndex].name
 
-    -- Remove the selected preset from the preset file
+  -- Remove the selected preset from the preset file
+  if track then
     local PresetFile = reaper.TrackFX_GetUserPresetFilename(track, fxnum, "")
     local file = io.open(PresetFile, "r")
     local content = file:read("*all")
@@ -547,6 +548,7 @@ function overwriteSelectedPresetData(track, fxnum, num_presets, fx_name, track_n
 
     -- Save the current settings as the selected preset
     Save_VST_Preset(track, fxnum, selectedPresetName, firstSelectedIndex)
+  end
 end
 
 
