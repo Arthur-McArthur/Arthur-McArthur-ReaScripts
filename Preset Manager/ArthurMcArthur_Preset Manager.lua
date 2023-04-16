@@ -95,8 +95,10 @@ end
 local function refreshFX(track, fxnum, num_presets, fx_name, track_name)
   local track_save = track
   local fxnumber_save = fxnum
-  reaper.TrackFX_Show(track, fxnum, 2)
-  reaper.TrackFX_Show(track_save, fxnumber_save , 3)
+  if track then
+    reaper.TrackFX_Show(track, fxnum, 2)
+    reaper.TrackFX_Show(track_save, fxnumber_save , 3)
+  end
 end
 
 local function renamePreset()
