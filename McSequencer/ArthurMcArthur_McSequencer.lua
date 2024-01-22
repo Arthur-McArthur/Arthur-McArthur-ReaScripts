@@ -3,20 +3,20 @@
 -- @license GPL v3
 -- @version 1.1
 -- @changelog
--- -Visual  overhaul: I moved over to using .png images instead of native ImGui widgets. This results in massive CPU performance increases at the expense of easy themeability and a small GPU hit.
--- -Most of the colors in the theme editor no longer will change the colors in the script, themes will now need to be edited via the provided Affinity Designer and knobman files.
--- -There are a few remaining native widgets which will be eventually converted over. Support for higher resolutions will be added as well.
--- -Added waveform display, click on it (or press q) to preview the selected sound(s)
--- -Vertical spacing between sequencer rows has been reduced to allow for more consistent input. Mouse drags will now always affect sequencer buttons
--- -Shift-arrow keys up and down will select multiple tracks
--- -Shifted notes will now wrap around to the start of the item
--- -Fixed off-grid notes not being editable in velocity sliders with left-click drag
--- -Mouse cursor will be hidden when dragging over a knob and will reappear at the drag start location when the mouse is released (thanks BirdBird!)
--- -Increased smoothness of left-click drag in velocity sliders
--- -Escape key will now close the  script
--- -Fixed bug with non-pattern items being truncated when opening McSequencer
--- -Fixed bug with using arrow keys up and down to select tracks
--- -Fixed bug with using alt-arrow keys up and down to reorder tracks. it works best within a single parent folder. tracks will now reorder while mainting their depth
+--Visual  overhaul: I moved over to using .png images instead of native ImGui widgets. This results in massive CPU performance increases at the expense of easy themeability and a small GPU hit.
+--Most of the colors in the theme editor no longer will change the colors in the script, themes will now need to be edited via the provided Affinity Designer and knobman files.
+--There are a few remaining native widgets which will be eventually converted over. Support for higher resolutions will be added as well.
+--Added waveform display, click on it (or press q) to preview the selected sound(s)
+--Vertical spacing between sequencer rows has been reduced to allow for more consistent input. Mouse drags will now always affect sequencer buttons
+--Shift-arrow keys up and down will select multiple tracks
+--Shifted notes will now wrap around to the start of the item
+--Fixed off-grid notes not being editable in velocity sliders with left-click drag
+--Mouse cursor will be hidden when dragging over a knob and will reappear at the drag start location when the mouse is released (thanks BirdBird!)
+--Increased smoothness of left-click drag in velocity sliders
+--Escape key will now close the  script
+--Fixed bug with non-pattern items being truncated when opening McSequencer
+--Fixed bug with using arrow keys up and down to select tracks
+--Fixed bug with using alt-arrow keys up and down to reorder tracks. it works best within a single parent folder. tracks will now reorder while mainting their depth
 -- @provides
 --   Modules/*.lua
 --   Images/*.png
