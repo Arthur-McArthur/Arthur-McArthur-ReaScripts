@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="ReaScripts" commit="7572202cc567794cb0896f474fe76d0b5b165a60">
+<index version="1" name="Arthur McArthur ReaScripts" commit="7572202cc567794cb0896f474fe76d0b5b165a60">
   <category name="Preset Manager">
     <reapack name="ArthurMcArthur_Preset Manager.lua" type="script" desc="Preset Manager">
       <metadata>
