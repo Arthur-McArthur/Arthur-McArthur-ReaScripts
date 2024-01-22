@@ -1,0 +1,414 @@
+// License: GPL - http://www.gnu.org/licenses/gpl.html
+// by William Clarke-Fields (bill@williamfields.com)
+// http://www.williamfields.com
+
+desc:Swing
+slider1:0<0,50,.5>Delay 0
+slider2:0<0,50,.5>Delay 1
+slider3:0<0,50,.5>Delay 2
+slider4:0<0,50,.5>Delay 3
+slider5:0<0,50,.5>Delay 4
+slider6:0<0,50,.5>Delay 5
+slider7:0<0,50,.5>Delay 6
+slider8:0<0,50,.5>Delay 7
+slider9:0<0,50,.5>Delay 8
+slider10:0<0,50,.5>Delay 9 
+slider11:0<0,50,.5>Delay 10
+slider12:0<0,50,.5>Delay 11
+slider13:0<0,50,.5>Delay 12
+slider14:0<0,50,.5>Delay 13
+slider15:0<0,50,.5>Delay 14
+slider16:0<0,50,.5>Delay 15
+slider17:<0,50,.5>Overall Delay Offset
+slider18:0<0,1,1>Bypass
+slider19:0<0,1,1{Quarter Note,Eighth Note}>Granularity
+slider20:2<2,16,1>Step Count
+slider21:100<0,200,1>Dry/Wet Percent
+slider22:0<0,16,1>Current Position
+slider23:0<0,200,1>Delay Jitter
+
+@init
+
+  noteOnMsg = $x90;
+  noteOffMsg = $x80;
+  unit = 400;
+  bypass = 0;
+  hiwater = 0;
+  loopLen = 20000 * 4 * unit;
+  
+  //Set memory offsets for arrays
+  noteTracker = 0;
+  lastDelayForNote = 128;
+  eventAt = 1024;
+  
+@slider
+
+  percent = slider21 / 100;
+  
+  swingAmt0 = floor((slider1*percent)+0.5);  
+  swingAmt1 = floor((slider2*percent)+0.5);
+  swingAmt2 = floor((slider3*percent)+0.5);
+  swingAmt3 = floor((slider4*percent)+0.5);
+  swingAmt4 = floor((slider5*percent)+0.5);
+  swingAmt5 = floor((slider6*percent)+0.5);
+  swingAmt6 = floor((slider7*percent)+0.5);
+  swingAmt7 = floor((slider8*percent)+0.5);
+  swingAmt8 = floor((slider9*percent)+0.5);
+  swingAmt9 = floor((slider10*percent)+0.5);
+  swingAmt10 = floor((slider11*percent)+0.5);
+  swingAmt11 = floor((slider12*percent)+0.5);
+  swingAmt12 = floor((slider13*percent)+0.5);
+  swingAmt13 = floor((slider14*percent)+0.5);
+  swingAmt14 = floor((slider15*percent)+0.5);
+  swingAmt15 = floor((slider16*percent)+0.5);
+ 
+  delayAmt = slider17;
+  bypass = slider18;
+  granularity = (slider19+1)*2;
+  stepCount = slider20;
+  jitter = slider23;
+  
+
+@block
+
+  beats_per_second = tempo/60;
+  samples_per_beat = srate/beats_per_second;
+  fraction_of_a_beat_per_sample = 1/samples_per_beat;
+
+  //------------------------------------------------------------------------
+
+  // If just stopped...
+  play_state != prev_play_state && play_state == 0 ?
+  (
+    // Clear noteTracker and lastDelayForNote
+    j = 0;
+    while
+    (
+      noteTracker[j] = 0;
+      lastDelayForNote[j] = 0;
+      j = j + 1;
+      j < 128;  
+    );     
+  
+    // Clear schedule when stopped
+    j = lastPos;
+    while
+    (
+      eventAt[j] = 0;
+      j = j + 1;
+      j <= hiwater;
+    );
+  );
+  prev_play_state = play_state;
+  
+  //------------------------------------------------------------------------
+    
+  // Update position display
+  slider22 = (floor(beat_position*granularity+0.1)) % stepCount;
+
+  //------------------------------------------------------------------------
+  
+  while
+  (
+    // If received MIDI message...
+    midirecv(ts,msg1,msg23) ?
+    (  
+      play_state == 0 ?
+      (
+        // Stopped, so just pass through
+        midisend(ts,msg1,msg23);  
+      ):(    
+        // Playing...                
+        
+        accurate_beat_position = beat_position + (ts*fraction_of_a_beat_per_sample);
+        currentPos = floor(accurate_beat_position * unit);
+        
+        // Get message type
+        status = msg1 & 240;
+        
+        status != noteOnMsg && status != noteOffMsg ?
+        (
+          // Non-note message, so just pass through
+          midisend(ts,msg1,msg23);  
+        ):(        
+          // Note message, so get info.
+          note = msg23 & 127;
+          velocity = (msg23/256) & 127;
+
+          status == noteOnMsg && velocity > 0 ?
+          (        
+            // Note on message...
+            
+            //*********************************
+            //CALCULATE DELAY
+            //*********************************
+          
+            bypass == 1 ?
+            (
+              actualDelay = 0;
+            ):(        
+              // CALCULATE DELAY (OVERALL DELAY + JITTER + STEP SPECIFIC DELAY)
+              actualDelay = delayAmt + floor(rand(jitter));  
+              
+              stepNum = (floor(accurate_beat_position*granularity+0.1)) % stepCount;  
+              stepNum == 0 ?  
+              (
+                actualDelay += swingAmt0;
+              ):(
+                stepNum == 1 ?
+                (
+                  actualDelay += swingAmt1;
+                ):(
+                  stepNum == 2 ?
+                  (
+                    actualDelay += swingAmt2;
+                  ):(
+                    stepNum == 3 ?
+                    (
+                      actualDelay += swingAmt3;
+                    ):(
+                      stepNum == 4 ?  
+                      (
+                        actualDelay += swingAmt4;
+                      ):(
+                        stepNum == 5 ?
+                        (
+                          actualDelay += swingAmt5;
+                        ):(
+                          stepNum == 6 ?
+                          (
+                            actualDelay += swingAmt6;
+                          ):(
+                            stepNum == 7 ?
+                            (
+                              actualDelay += swingAmt7;
+                            ):(
+                              stepNum == 8 ?  
+                              (
+                                actualDelay += swingAmt8;
+                              ):(
+                                stepNum == 9 ?
+                                (
+                                  actualDelay += swingAmt9;
+                                ):(
+                                  stepNum == 10 ?
+                                  (
+                                    actualDelay += swingAmt10;
+                                  ):(
+                                    stepNum == 11 ?
+                                    (
+                                      actualDelay += swingAmt11;
+                                    ):(
+                                      stepNum == 12 ?  
+                                      (
+                                        actualDelay += swingAmt12;
+                                      ):(
+                                        stepNum == 13 ?
+                                        (
+                                          actualDelay += swingAmt13;
+                                        ):(
+                                          stepNum == 14 ?
+                                          (
+                                            actualDelay += swingAmt14;
+                                          ):(
+                                            stepNum == 15 ?
+                                            (
+                                              actualDelay += swingAmt15;
+                                            );
+                                          );
+                                        );
+                                      );
+                                    );
+                                  );
+                                );
+                              );
+                            );
+                          );
+                        );
+                      );
+                    );
+                  );
+                );
+              );      
+            );
+                    
+            actualDelay == 0 ?
+            (
+              // No delay...
+                      
+              // Increment noteTracker and send
+              noteTracker[note] += 1;
+              midisend(ts,noteOnMsg,msg23);          
+
+              lastDelayForNote[note] = 0;              
+            ):(
+              // There is some delay, so schedule event in future...
+                          
+              // Calculate new timing for event
+              newEventTime = (currentPos+actualDelay) % loopLen;
+                      
+              //If an event is already scheduled at this time...          
+              eventAt[newEventTime] > 0 ? 
+              (
+                //Then find the next open slot and use it instead.
+                while
+                (
+                  newEventTime = (newEventTime + 1) % loopLen;
+                  eventAt[newEventTime] > 0;
+                );
+              );
+              
+              //Schedule event
+              eventAt[newEventTime] = msg23;
+              
+              lastDelayForNote[note] = actualDelay;
+              
+              // Update high water mark
+              newEventTime > hiwater ? hiwater = newEventTime;
+              
+            );
+            // (END Note on message)
+            
+          ):(
+            // Note off message...
+                          
+            lastDelayForNote[note] == 0 ? 
+            (
+              // If the corresponding note_on was not delayed, then handle immediately...
+              
+              // Decrement noteTracker
+              noteTracker[note] -= 1;
+              noteTracker[note] <= 0 ?
+              (
+                // If noteTracker back to 0, then send
+                midisend(ts,noteOffMsg,msg23);
+                noteTracker[note] = 0;
+              );
+            ):(
+              // Otherwise, the corresponding note_on was delayed, so also delay note_off
+              
+              // Calculate new timing for event
+              newEventTime = (currentPos+lastDelayForNote[note]) % loopLen;
+                    
+              //If an event is already scheduled at this time...          
+              eventAt[newEventTime] > 0 ? 
+              (
+                //Then find the next open slot and use it instead.
+                while
+                (
+                  newEventTime = (newEventTime + 1) % loopLen;
+                  eventAt[newEventTime] > 0;
+                );
+              );
+                        
+              //Schedule event
+              eventAt[newEventTime] = msg23;
+            
+              // Update high water mark
+              newEventTime > hiwater ? hiwater = newEventTime;              
+            );
+          );
+        );
+      );
+      bla=1;
+    );
+  ); 
+
+@sample
+
+  play_state > 0 ?
+  (      
+    //*********************************************************************************************************
+    // DETERMINE SAMPLE ACCURATE BEAT POSITION BASED ON LAST BEAT_POSITION VALUE + OFFSET WITHIN BLOCK
+    //*********************************************************************************************************
+    beat_position == sample_last_beat_pos ?
+    (
+      // beat position has not updated since last sample, so increment sample offset within block.
+      sample_offset_within_block += 1;
+    ):(
+      // beat position has updated!  Must be at start of block.  Reset offset counter!
+      sample_offset_within_block = 0;
+    );
+    sample_last_beat_pos = beat_position;
+      
+    // update accurate beat_position accordingly
+    accurate_beat_position = beat_position + (sample_offset_within_block*fraction_of_a_beat_per_sample);
+
+    // Get current position (offset from loop start)
+    currentPos = floor(accurate_beat_position * unit);
+    
+    // Has position been updated since last sample?
+    currentPos != lastPos ?
+    (        
+      // ------------------------------------------------
+    
+      // Detect a jump
+      abs(lastPos-currentPos) > 10 ?
+      (            
+        // To avoid hung notes on jump...
+        // Execute all scheduled noteOffs, and clear all scheduled noteOns
+        j = lastPos;
+        while
+        (
+          eventData = eventAt[j];
+          eventData > 0 ?
+          (
+            velocity = (eventData/256) & 127;
+            velocity == 0 ? 
+            (
+              note = eventData & 127;
+              noteTracker[note] -= 1;
+              noteTracker[note] <= 0 ?
+              (
+                midisend(sample_offset_within_block,noteOffMsg,eventData);
+                noteTracker[note] = 0;
+              );
+            );          
+            eventAt[j] = 0;
+          );
+          j = j + 1;
+          j <= hiwater;
+        );
+              
+        hiwater = 0;
+      );
+
+      // ------------------------------------------------
+    
+      //Execute any events scheduled at this time
+      eventData = eventAt[currentPos];
+      eventData > 0 ?
+      (          
+        note = eventData & 127;
+        velocity = (eventData/256) & 127;
+                  
+        // NOTE ON
+        velocity > 0 ? 
+        (
+          noteTracker[note] += 1;
+          midisend(sample_offset_within_block,noteOnMsg,eventData);
+        );
+        
+        // NOTE OFF
+        velocity == 0 ? 
+        (
+          noteTracker[note] -= 1;
+          noteTracker[note] <= 0 ?
+          (
+            midisend(sample_offset_within_block,noteOffMsg,eventData);
+            noteTracker[note] = 0;
+          );
+        );
+             
+        //Clear this event from schedule
+        eventAt[currentPos] = 0;
+      );  
+      
+    ); //end (currentPos != lastPos)
+    lastPos = currentPos;        
+  ); //end (play_state > 0)    
+ 
+    
+    
+    
+    

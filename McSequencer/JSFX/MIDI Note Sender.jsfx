@@ -1,0 +1,21 @@
+desc:Note Trigger
+//tags: MIDI
+//author: Arthur McArthur
+
+slider1:0<0,1,1>Trigger
+
+@init
+// Initialize a variable to track the state of the note
+note_is_on = 0; 
+
+@block
+trigger = slider1;
+
+// Check if the slider is triggered and send MIDI note on C4 with velocity 96
+(trigger && !note_is_on) ? (
+  midisend(0, $x90, 60, 96); // Note on for C4 at velocity 96
+  note_is_on = 1; // Mark the note as "on"
+) : (!trigger && note_is_on) ? (
+  midisend(0, $x80, 60, 0); // Note off for C4
+  note_is_on = 0; // Mark the note as "off"
+);
