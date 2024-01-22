@@ -52,16 +52,16 @@ return function(script_path, resources_path, themes_path)
         "Button 8",
         "Button 9",
         "Button 10",
-        "playcursor_bg",
-        "playcursor_frame 12",
-        "playcursor_active 13",
-        "playcursor_hovered 14",
-        "Steps_border 15",
-        "Steps_even_off 16",
-        "Steps_even_on 17",
-        "Steps_odd_off 18",
-        "Steps_odd_on 19",
-        "Steps_line 20",
+        "Button 11",
+        "Button 12",
+        "Button 13",
+        "Button 14",
+        "Button 15",
+        "Button 16",
+        "Button 17",
+        "Button 18",
+        "Button 19",
+        "Button 20",
         "Button 21",
         "Button 22",
         "Slider 1",
@@ -71,8 +71,8 @@ return function(script_path, resources_path, themes_path)
         "Button 27",
         "Button 28",
         "Button 29",
-        "selector 30",
-        "selector_frame 31",
+        "Button 30",
+        "Button 31",
         "channelbutton 32",
         "channelbutton_dropped 33",
         "channelbutton_active 34",
@@ -81,12 +81,12 @@ return function(script_path, resources_path, themes_path)
         "Sidebar Text 37",
         "Button 38",
         "Button 39",
-        "knob_tcp_circle",
-        "knob_tcp_line",
-        "knob_env_circle 42",
-        "knob_env_line 43",
-        "knob_sidebar_circle 44",
-        "knob_sidebar_line 45",
+        "Button 40",
+        "Button 41",
+        "Button 42",
+        "Button 43",
+        "Button 44",
+        "Button 45",
         "Button 46",
         "Button 47",
         "Button 48",
@@ -96,15 +96,15 @@ return function(script_path, resources_path, themes_path)
         "Button 52",
         "Button 53",
         "Button 54",
-        "button_mute_active 55",
-        "button_mute_inactive 56",
-        "button_mute_border 57",
-        "button_solo_active 58",
-        "button_solo_inactive 59",
-        "button_solo_border 60",
-        "button_sidebar_active 61",
-        "button_sidebar_inactive 62",
-        "button_sidebar_border 63",
+        "Button 55",
+        "Button 56",
+        "Button 57",
+        "Button 58",
+        "Button 59",
+        "Button 60",
+        "Button 61",
+        "Button 62",
+        "Button 63",
         "Button 64",
         "Button 65",
         "Waveform Display 66",
@@ -354,8 +354,6 @@ return function(script_path, resources_path, themes_path)
         return colors
     end
 
-
-    
     -- Function to load colors from a file
     M.loadColorsFromFile = function(filename)
         local file, err = loadfile(filename)
@@ -375,22 +373,13 @@ return function(script_path, resources_path, themes_path)
         end
         return nil
     end
-
-    --  reaper.SetExtState('McSequencer', "themeLastLoadedPath", '', 1)
-    -- On script start, try loading the last loaded theme
-    local lastLoadedFile = reaper.GetExtState(extStateKey, "themeLastLoadedPath")
-    if lastLoadedFile ~= "" then
-        -- print('last loaded')
-        -- print2(lastLoadedFile)
-
-        button_colors = M.loadColorsFromFile(lastLoadedFile)
-    else
-        -- If there's no last loaded file or loading fails, load the default theme
-        -- print('default')
+    -- local lastLoadedFile = reaper.GetExtState(extStateKey, "themeLastLoadedPath")
+    -- if lastLoadedFile ~= "" then
+    --     button_colors = M.loadColorsFromFile(lastLoadedFile)
+    -- else
         local default_theme_filename = script_path .. "Themes/theme_1.txt"
-        -- print2(default_theme_filename)
         button_colors = M.loadColorsFromFile(default_theme_filename)
-    end
+    -- end
 
     return M
 end

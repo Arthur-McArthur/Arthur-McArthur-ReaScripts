@@ -4720,14 +4720,12 @@ local colorValues = colors.colorUpdate()
 params.getinfo(script_path, modules_path, themes_path)
 -- printTable(colorValues)
 size_modifier, obj_x, obj_y, time_resolution, vfindTempoMarker, fontSize, fontSidebarButtonsSize = getPreferences()
-drawList = reaper.ImGui_GetWindowDrawList(ctx)
-local font = reaper.ImGui_CreateFont("Arial", fontSize)
-font_SidebarSampleTitle = reaper.ImGui_CreateFont("Arial", fontSidebarButtonsSize + 4)
-font_SidebarButtons = reaper.ImGui_CreateFont("Arial", fontSidebarButtonsSize)
+local font = reaper.ImGui_CreateFont("sans-serif", fontSize)
+font_SidebarSampleTitle = reaper.ImGui_CreateFont("sans-serif", fontSidebarButtonsSize + 4)
+font_SidebarButtons = reaper.ImGui_CreateFont("sans-serif", fontSidebarButtonsSize)
 reaper.ImGui_Attach(ctx, font)
 reaper.ImGui_Attach(ctx, font_SidebarSampleTitle)
 reaper.ImGui_Attach(ctx, font_SidebarButtons )
-
 
 if not selectedButtonIndex then
     local selectedTrack = reaper.GetSelectedTrack(0, 0) -- Get the first selected track
@@ -4738,8 +4736,9 @@ if not selectedButtonIndex then
 end
 
 local clipper = reaper.ImGui_CreateListClipper(ctx)
+reaper.ImGui_Attach(ctx, clipper)
 local FLT_MIN, FLT_MAX = reaper.ImGui_NumericLimits_Float()
-reaper.ImGui_SetConfigVar(ctx, 18, 1) -- move from title bar only
+reaper.ImGui_SetConfigVar(ctx, reaper.ImGui_ConfigVar_WindowsMoveFromTitleBarOnly(), 1) -- move from title bar only
 local windowflags = reaper.ImGui_WindowFlags_NoScrollbar() | reaper.ImGui_WindowFlags_NoScrollWithMouse() |
 reaper.ImGui_WindowFlags_MenuBar() | reaper.ImGui_WindowFlags_NoCollapse()
 
@@ -4760,6 +4759,8 @@ local function loop()
     -- reaper.ImGui_Col_ScrollbarGrab()
     reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ScrollbarBg(), colorValues.color4_scrollbar);
     visible, open = reaper.ImGui_Begin(ctx, "McSequencer", true, windowflags);
+    drawList = reaper.ImGui_GetWindowDrawList(ctx)
+
     reaper.ImGui_PushFont(ctx, font);
 
     anyMenuOpen = isAnyMenuOpen(menu_open)
