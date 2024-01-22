@@ -1,7 +1,7 @@
 -- @description Arthur McArthur McSequencer
 -- @author Arthur McArthur
 -- @license GPL v3
--- @version 1.1
+-- @version 1.1.1
 -- @changelog
 --  Visual  overhaul: I moved over to using .png images instead of native ImGui widgets. This results in massive CPU performance increases at the expense of easy themeability and a small GPU hit.
 --  Most of the colors in the theme editor no longer will change the colors in the script, themes will now need to be edited via the provided Affinity Designer and knobman files.
