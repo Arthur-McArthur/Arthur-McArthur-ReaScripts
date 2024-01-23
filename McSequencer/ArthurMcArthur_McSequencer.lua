@@ -653,14 +653,14 @@ local function obj_Knob2(ctx, imageParams, id, value, params, mouse, keys, yOffs
 
     if isActive then
 
+        
+        reaper.ImGui_SetMouseCursor(ctx, reaper.ImGui_MouseCursor_None())
+        local mouse_x, mouse_y = reaper.GetMousePosition()
+        local trackDeltaX = mouse_x - dragStartPos[id].x
+        local trackDeltaY = mouse_y - dragStartPos[id].y
+        
         if os == "Win64" then
-
-            reaper.ImGui_SetMouseCursor(ctx, reaper.ImGui_MouseCursor_None())
-            local mouse_x, mouse_y = reaper.GetMousePosition()
-            local trackDeltaX = mouse_x - dragStartPos[id].x
-            local trackDeltaY = mouse_y - dragStartPos[id].y
             reaper.JS_Mouse_SetPosition(dragStartPos[id].x, dragStartPos[id].y)
-
         end
 
         local delta = params.dragDirection == 'Horizontal' and trackDeltaX or -trackDeltaY
