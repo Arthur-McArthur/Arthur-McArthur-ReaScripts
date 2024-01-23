@@ -1,7 +1,7 @@
 -- @description Arthur McArthur McSequencer
 -- @author Arthur McArthur
 -- @license GPL v3
--- @version 1.1.2
+-- @version 1.1.3
 -- @changelog
 --  Various Mac bug fixes (thanks cfillon!)
 --  Fonts bundled with script now
