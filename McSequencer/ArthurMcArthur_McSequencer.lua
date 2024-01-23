@@ -644,7 +644,6 @@ local function obj_Knob2(ctx, imageParams, id, value, params, mouse, keys, yOffs
     
         return math.max(math.min(newValue, params.max), params.min)
     end
-    
 
     if reaper.ImGui_IsItemClicked(ctx, 0) then
         local x, y = reaper.GetMousePosition()
