@@ -1,4 +1,4 @@
--- @version 1.1.1
+-- @noindex
 local function print(v) reaper.ShowConsoleMsg("\n" .. v) end
 
 local function print2(v)
