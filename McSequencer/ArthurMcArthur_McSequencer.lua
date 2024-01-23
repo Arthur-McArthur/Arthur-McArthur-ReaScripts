@@ -41,6 +41,7 @@ local function checkDependencies()
     return false
 end
 
+
 if checkDependencies() then return end
 
 local function print(v) reaper.ShowConsoleMsg("\n" .. tostring(v)) end
