@@ -1,10 +1,9 @@
 -- @description Arthur McArthur McSequencer
 -- @author Arthur McArthur
 -- @license GPL v3
--- @version 1.1.5
+-- @version 1.1.6
 -- @changelog
---  Various Mac bug fixes (thanks cfillon!)
---  Fonts bundled with script now
+--  Fixed knob crash
 -- @provides
 --   Modules/*.lua
 --   Images/*.png
@@ -655,9 +654,9 @@ local function obj_Knob2(ctx, imageParams, id, value, params, mouse, keys, yOffs
 
         if os == "Win64" then
             reaper.ImGui_SetMouseCursor(ctx, reaper.ImGui_MouseCursor_None())
-            local mouse_x, mouse_y = reaper.GetMousePosition()
-            local trackDeltaX = mouse_x - dragStartPos[id].x
-            local trackDeltaY = mouse_y - dragStartPos[id].y    
+            mouse_x, mouse_y = reaper.GetMousePosition()
+            trackDeltaX = mouse_x - dragStartPos[id].x
+            trackDeltaY = mouse_y - dragStartPos[id].y    
             reaper.JS_Mouse_SetPosition(dragStartPos[id].x, dragStartPos[id].y)
         else
             trackDeltaX = mouse.delta_x
