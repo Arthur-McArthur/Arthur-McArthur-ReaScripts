@@ -1,7 +1,7 @@
 -- @description Arthur McArthur McSequencer
 -- @author Arthur McArthur
 -- @license GPL v3
--- @version 1.1.8
+-- @version 1.1.9
 -- @changelog
 --  Fixed crash when undocking
 --  RS5K minimum velocity set to 0 by default
@@ -2891,7 +2891,7 @@ local function obj_Channel_Button(ctx, track, actualTrackIndex, buttonIndex, mou
     if reaper.ImGui_BeginPopup(ctx, contextMenuID, reaper.ImGui_WindowFlags_NoMove()) then
         obj_Channel_Button_Menu(ctx, actualTrackIndex, contextMenuID, patternItems, track_count)
         menu_open[buttonIndex] = true
-        print(buttonIndex)
+        -- print(buttonIndex)
     elseif not reaper.ImGui_IsPopupOpen(ctx, contextMenuID) then
         menu_open[buttonIndex] = false
     end
