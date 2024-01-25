@@ -1,9 +1,12 @@
 -- @description Arthur McArthur McSequencer
 -- @author Arthur McArthur
 -- @license GPL v3
--- @version 1.1.6
+-- @version 1.1.7
 -- @changelog
---  Fixed knob crash
+--  Fixed crash when undocking
+--  RS5K minimum velocity set to 0 by default
+--  Removed GUI scale option while resizing gets refactored for the new image system
+
 -- @provides
 --   Modules/*.lua
 --   Images/*.png
@@ -603,7 +606,6 @@ local function obj_Knob_Menu(ctx, value)
     return value, rv
 end
 
-
 local function obj_Knob2(ctx, imageParams, id, value, params, mouse, keys, yOffset)
     reaper.ImGui_InvisibleButton(ctx, id, params.frameWidth, params.frameHeight)
     reaper.ImGui_SameLine(ctx)
@@ -621,6 +623,7 @@ local function obj_Knob2(ctx, imageParams, id, value, params, mouse, keys, yOffs
     local overallSensitivity = 250
 
     -- Transform the value to a curved scale
+    if not value then return end
     local normalizedValue = (value - params.min) / (params.max - params.min)
     local curvedValue = normalizedValue ^ params.scaling
     -- Mouse drag logic
@@ -2238,13 +2241,16 @@ local function obj_VelocitySliders(ctx, trackIndex, note_positions, note_velocit
         local slider_value = nil -- Default to no value
         local isNotePresent = false
         -- Check for the presence of a note at this step and set slider_value if found
-        for idx, note_pos in ipairs(note_positions) do
+        local numNotePositions = #note_positions
+        for idx = 1, numNotePositions do
+            local note_pos = note_positions[idx]
             if math.abs(note_pos - step_time) <= tolerance then
                 slider_value = note_velocities[idx] / 127
                 isNotePresent = true
                 break
             end
         end
+
 
         -- Display the slider
         local color = (math.floor(i / 4) % 2 == 0) and color1 or color2
@@ -2419,7 +2425,9 @@ local function insertNewTrack(filename, track_suffix, track_count)
             -- Close the RS5k window immediately after opening
             reaper.TrackFX_Show(new_track, rs5k_index, 2)
             reaper.TrackFX_Show(new_track, fx_swing, 2)
-            --reaper.TrackFX_Show(new_track, fx_offsetshift, 2)
+            
+            -- set minimum velocity to 0
+            reaper.TrackFX_SetParamNormalized(new_track, rs5k_index, 2, 0)
 
             -- Load the dropped file into RS5k
             reaper.TrackFX_SetNamedConfigParm(new_track, rs5k_index, "FILE0", filename)
@@ -2893,6 +2901,7 @@ local function obj_Channel_Button(ctx, track, actualTrackIndex, buttonIndex, mou
     if reaper.ImGui_BeginPopup(ctx, contextMenuID, reaper.ImGui_WindowFlags_NoMove()) then
         obj_Channel_Button_Menu(ctx, actualTrackIndex, contextMenuID, patternItems, track_count)
         menu_open[buttonIndex] = true
+        print(buttonIndex)
     elseif not reaper.ImGui_IsPopupOpen(ctx, contextMenuID) then
         menu_open[buttonIndex] = false
     end
@@ -3063,6 +3072,10 @@ end
 local function obj_Pattern_Controller(patternItems, ctx, mouse, keys, colorValues)
     -- Determine the maximum pattern number among all retrieved pattern items.
     local maxPatternNumber = 0;
+
+    -- for patternNumber = 1, #patternItems do
+    --     maxPatternNumber = math.max(maxPatternNumber, patternNumber);
+    -- end;
     for patternNumber, _ in pairs(patternItems) do
         maxPatternNumber = math.max(maxPatternNumber, patternNumber);
     end;
@@ -3115,20 +3128,39 @@ local function obj_Pattern_Controller(patternItems, ctx, mouse, keys, colorValue
 
     local patternSelected = false;
     -- If the selected pattern number has associated items, process the first item to set the length slider.
+    -- if patternItems[patternSelectSlider] then
+    --     for _, item in ipairs(patternItems[patternSelectSlider]) do
+    --         selectedItem = item;
+    --         if item ~= nil then
+    --             local itemLength = reaper.GetMediaItemInfo_Value(item, "D_LENGTH");
+    --             local patternStartPos = reaper.GetMediaItemInfo_Value(item, "D_POSITION")
+    --             selectedItemStartPos = selectedItemStartPos or patternStartPos
+    --             local beatsInSec = reaper.TimeMap2_beatsToTime(0, 1);
+    --             -- Calculate the length slider value based on item length.
+    --             lengthSlider = math.floor(itemLength / beatsInSec * time_resolution);
+    --             patternSelected = true;
+    --         end
+    --     end;
+    -- end;
+
     if patternItems[patternSelectSlider] then
-        for _, item in ipairs(patternItems[patternSelectSlider]) do
-            selectedItem = item;
+        local items = patternItems[patternSelectSlider]
+        local numItems = #items
+        for i = 1, numItems do
+            local item = items[i]
+            selectedItem = item
             if item ~= nil then
-                local itemLength = reaper.GetMediaItemInfo_Value(item, "D_LENGTH");
+                local itemLength = reaper.GetMediaItemInfo_Value(item, "D_LENGTH")
                 local patternStartPos = reaper.GetMediaItemInfo_Value(item, "D_POSITION")
                 selectedItemStartPos = selectedItemStartPos or patternStartPos
-                local beatsInSec = reaper.TimeMap2_beatsToTime(0, 1);
+                local beatsInSec = reaper.TimeMap2_beatsToTime(0, 1)
                 -- Calculate the length slider value based on item length.
-                lengthSlider = math.floor(itemLength / beatsInSec * time_resolution);
-                patternSelected = true;
+                lengthSlider = math.floor(itemLength / beatsInSec * time_resolution)
+                patternSelected = true
             end
-        end;
-    end;
+        end
+    end
+
 
     local numSteps = math.floor(16 * 4 / snapAmount);
 
@@ -3151,6 +3183,7 @@ local function obj_Pattern_Controller(patternItems, ctx, mouse, keys, colorValue
 
     if reaper.ImGui_IsItemClicked(ctx, 1) then
         reaper.ImGui_OpenPopup(ctx, "patternLengthMenu")
+        
     end
 
     if reaper.ImGui_BeginPopup(ctx, "patternLengthMenu", reaper.ImGui_WindowFlags_NoMove()) then
@@ -3170,16 +3203,22 @@ local function obj_Pattern_Controller(patternItems, ctx, mouse, keys, colorValue
             lengthSlider = 64
             reaper.ImGui_CloseCurrentPopup(ctx) -- Close the context menu
         end
+        -- menu_open[1] = true
         reaper.ImGui_EndPopup(ctx)
     end
 
     if not patternItems[patternSelectSlider] then
         local lastPatternNumber = nil
-        for patternNumber, _ in pairs(patternItems) do
+        for patternNumber = 1, #patternItems do
             if not lastPatternNumber or patternNumber > lastPatternNumber then
                 lastPatternNumber = patternNumber
             end
         end
+        -- for patternNumber, _ in pairs(patternItems) do
+        --     if not lastPatternNumber or patternNumber > lastPatternNumber then
+        --         lastPatternNumber = patternNumber
+        --     end
+        -- end
         patternSelectSlider = lastPatternNumber or 1
     end
 
@@ -3199,11 +3238,50 @@ local function obj_Pattern_Controller(patternItems, ctx, mouse, keys, colorValue
             end
         end
 
+        -- if patternTrackIdx then
+        --     for patternNumber, items in pairs(patternItems) do
+        --         if patternNumber == patternSelectSlider then  -- Check if the pattern is selected
+        --             for _, patternItem in ipairs(items) do
+        --                 local patternStartPos = reaper.GetMediaItemInfo_Value(patternItem, "D_POSITION")
+        --                 local newLength = beatsInSec * (lengthSlider / time_resolution)
+
+        --                 -- Find the next pattern item to determine the maximum allowed length
+        --                 local nextPatternItem = reaper.GetTrackMediaItem(reaper.GetTrack(0, patternTrackIdx), reaper.GetMediaItemInfo_Value(patternItem, "IP_ITEMNUMBER") + 1)
+        --                 local nextPatternStartPos = nextPatternItem and reaper.GetMediaItemInfo_Value(nextPatternItem, "D_POSITION") or patternStartPos + newLength
+        --                 local maxAllowedLength = math.min(newLength, nextPatternStartPos - patternStartPos)
+
+        --                 -- Set the length of the pattern item and its associated items
+        --                 reaper.SetMediaItemInfo_Value(patternItem, "D_LENGTH", maxAllowedLength)
+        --                 for trackIdx = 0, trackCount - 1 do
+        --                     local track = reaper.GetTrack(0, trackIdx)
+        --                     local itemCount = reaper.CountTrackMediaItems(track)
+
+        --                     for itemIdx = 0, itemCount - 1 do
+        --                         local item = reaper.GetTrackMediaItem(track, itemIdx)
+        --                         local itemPos = reaper.GetMediaItemInfo_Value(item, "D_POSITION")
+
+        --                         -- Check if the item is associated with the selected pattern
+        --                         if itemPos == patternStartPos then
+        --                             local _, trackName = reaper.GetTrackName(track)
+        --                             if string.sub(trackName, - #track_suffix) == track_suffix then
+        --                                 reaper.SetMediaItemInfo_Value(item, "D_LENGTH", maxAllowedLength)
+        --                             end
+        --                         end
+        --                     end
+        --                 end
+        --             end
+        --         end
+        --     end
+        -- end
+
         if patternTrackIdx then
-            -- Iterate over each pattern
-            for patternNumber, items in pairs(patternItems) do
+            local numPatterns = #patternItems
+            for patternNumber = 1, numPatterns do
                 if patternNumber == patternSelectSlider then  -- Check if the pattern is selected
-                    for _, patternItem in ipairs(items) do
+                    local items = patternItems[patternNumber]
+                    local numItems = #items
+                    for i = 1, numItems do
+                        local patternItem = items[i]
                         local patternStartPos = reaper.GetMediaItemInfo_Value(patternItem, "D_POSITION")
                         local newLength = beatsInSec * (lengthSlider / time_resolution)
 
@@ -3782,7 +3860,9 @@ local function obj_PlayCursor_Buttons(ctx, mouse, keys, patternSelectSlider, col
     local beatsInSec = reaper.TimeMap2_beatsToTime(0, 1) / time_resolution
     local cursorPosition = reaper.GetPlayState() & 1 == 1 and reaper.GetPlayPosition() or reaper.GetCursorPosition()
 
-    for _, item in ipairs(currentPatternItems) do
+    local numItems = #currentPatternItems
+    for i = 1, numItems do
+        local item = currentPatternItems[i]
         local itemPosition = reaper.GetMediaItemInfo_Value(item, "D_POSITION")
         local itemLength = reaper.GetMediaItemInfo_Value(item, "D_LENGTH")
         if cursorPosition >= itemPosition and cursorPosition < itemPosition + itemLength then
@@ -3790,6 +3870,7 @@ local function obj_PlayCursor_Buttons(ctx, mouse, keys, patternSelectSlider, col
             break
         end
     end
+
     selectedItem = selectedItem or currentPatternItems[1]
 
     local selectedItemPosition = reaper.GetMediaItemInfo_Value(selectedItem, "D_POSITION")
@@ -4008,12 +4089,21 @@ local function obj_Sequencer_Buttons(ctx, trackIndex, mouse, keys, pattern_item,
         step_start = step_start_points[i]
         step_end = step_start + step_duration
 
-        for _, pos in ipairs(note_positions) do
+        local note_positions_length = #note_positions
+        for j = 1, note_positions_length do
+            local pos = note_positions[j]
             if pos >= (step_start - adjusted_step_duration) and pos < (step_end - adjusted_step_duration) then
                 buttonStates[trackIndex][i] = true
                 break
             end
         end
+
+        -- for _, pos in ipairs(note_positions) do
+        --     if pos >= (step_start - adjusted_step_duration) and pos < (step_end - adjusted_step_duration) then
+        --         buttonStates[trackIndex][i] = true
+        --         break
+        --     end
+        -- end
 
         local isDarkerBlock = ((i - 1) // time_resolution) % 2 == 0
         local colorBlue = isDarkerBlock and images.Step_odd_off.i  or images.Step_even_off.i 
@@ -4081,7 +4171,9 @@ end
 
 function countNotesInStep(note_positions, step_start, step_end)
     local count = 0
-    for _, pos in ipairs(note_positions) do
+    local numNotePositions = #note_positions
+    for i = 1, numNotePositions do
+        local pos = note_positions[i]
         if pos >= step_start and pos < step_end then
             count = count + 1
         end
@@ -4582,17 +4674,17 @@ local function obj_Preferences(ctx)
     end
 
     if reaper.ImGui_BeginPopupModal(ctx, 'PreferencesPopup', nil, reaper.ImGui_WindowFlags_AlwaysAutoResize()) then
-        local scalingFactor = 0.1
-        local sliderIntValue = math.floor(size_modifier / scalingFactor + 0.5)
-        local minValue = math.floor(0.8 / scalingFactor)
-        local maxValue = math.floor(3 / scalingFactor)
-        local label = string.format('GUI Size: %.1f', size_modifier)
-        _, sliderIntValue = reaper.ImGui_SliderInt(ctx, label, sliderIntValue, minValue, maxValue)
-        size_modifier = sliderIntValue * scalingFactor
-        obj_x, obj_y = math.floor(20 * size_modifier), math.floor(34 * size_modifier)
+        -- local scalingFactor = 0.1
+        -- local sliderIntValue = math.floor(size_modifier / scalingFactor + 0.5)
+        -- local minValue = math.floor(0.8 / scalingFactor)
+        -- local maxValue = math.floor(3 / scalingFactor)
+        -- local label = string.format('GUI Size: %.1f', size_modifier)
+        -- _, sliderIntValue = reaper.ImGui_SliderInt(ctx, label, sliderIntValue, minValue, maxValue)
+        -- size_modifier = sliderIntValue * scalingFactor
+        -- obj_x, obj_y = math.floor(20 * size_modifier), math.floor(34 * size_modifier)
 
-        _, fontSize = reaper.ImGui_SliderInt(ctx, 'Font Size (requires restart)', fontSize, 6, 20)
-        _, fontSidebarButtonsSize = reaper.ImGui_SliderInt(ctx, 'Sidebar Font Size (requires restart)',
+        _, fontSize = reaper.ImGui_SliderInt(ctx, 'Font Size -requires restart-', fontSize, 6, 20)
+        _, fontSidebarButtonsSize = reaper.ImGui_SliderInt(ctx, 'Sidebar Font Size -requires restart-',
             fontSidebarButtonsSize, 6, 20)
 
         if reaper.ImGui_Checkbox(ctx, 'Track Time Signature Markers', vfindTempoMarker) then
@@ -4745,21 +4837,18 @@ local function loop()
     if showColorPicker then
         colorValues = colors.colorUpdate()
     end
-    
     reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_WindowMinSize(), 440, 250)
     reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_WindowBg(), colorValues.color1_bg);
     reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_TitleBg(), colorValues.color2_titlebar);
     reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_TitleBgActive(), colorValues.color3_titlebaractive);
-    -- reaper.ImGui_Col_ScrollbarGrab()
     reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ScrollbarBg(), colorValues.color4_scrollbar);
+    reaper.ImGui_PushFont(ctx, font);
+    
     visible, open = reaper.ImGui_Begin(ctx, "McSequencer", true, windowflags);
     drawList = reaper.ImGui_GetWindowDrawList(ctx)
-
-    reaper.ImGui_PushFont(ctx, font);
-
     anyMenuOpen = isAnyMenuOpen(menu_open)
     -- printTable(menu_open)
-
+    
     if visible then
         local track_count = reaper.CountTracks(0)
         local patternItems, patternTrackIndex, patternTrack = getPatternItems(track_count)
@@ -4772,8 +4861,9 @@ local function loop()
             controlSidebarWidth = 208
         else
             controlSidebarWidth = 220
-        end     
+        end   
 
+        
         ----- MENU BAR -----
         if reaper.ImGui_BeginMenuBar(ctx) then
             if reaper.ImGui_BeginMenu(ctx, "Options") then
@@ -4850,7 +4940,6 @@ local function loop()
             --         print(k, v)
             --     end
             -- end
-            
 
             reaper.ImGui_SameLine(ctx, window_width - 85 * size_modifier);
 
@@ -4858,7 +4947,6 @@ local function loop()
             if obj_Button(ctx, "Velocity", false, colorValues.color34_channelbutton_active, colorValues.color32_channelbutton, colorValues.color35_channelbutton_frame, 1, 66 * size_modifier, 22 * size_modifier, "Show velocity sliders") then
                 show_VelocitySliders = not show_VelocitySliders;
             end;
-
 
             local dl = reaper.ImGui_GetWindowDrawList(ctx)
             local wx, wy = reaper.ImGui_GetCursorScreenPos(ctx)
@@ -4919,13 +5007,7 @@ local function loop()
             obj_PlayCursor_Buttons(ctx, mouse, keys, patternSelectSlider, colorValues);
             adjustCursorPos(ctx, 0, 1)
 
-            -- local wx, wy = reaper.ImGui_GetCursorScreenPos(ctx)
-            -- reaper.ImGui_DrawList_AddLine(drawList, wx, wy, wx + window_width, wy, colorValues.color6_separator,
-            --     1 * size_modifier)
             reaper.ImGui_Dummy(ctx, 0, 0)
-
-            -- reaper.ImGui_EndChild(ctx)
-            -- end
 
             ----- DELETE POPUP ------
 
@@ -4937,8 +5019,6 @@ local function loop()
                     deleteTrack(trackIndex)
                 end
             end
-
-
 
             -----  SEQUENCER -----
             if channel and channel.channel_amount then
@@ -5017,11 +5097,8 @@ local function loop()
 
                 obj_Invisible_Channel_Button(track_suffix, ctx, count_tracks, colorValues, window_height)
 
-                -- reaper.ImGui_Dummy(ctx, 1, 1)
-
                 seqScrollPos = reaper.ImGui_GetScrollX(ctx)
 
-                -- end
             end
             reaper.ImGui_EndChild(ctx)
             -- reaper.ImGui_Dummy(ctx, 0, 0)
@@ -5030,11 +5107,8 @@ local function loop()
         end
 
         printHere()
-        reaper.ImGui_PopFont(ctx);
-
+        
         ---- CONTROL SIDEBAR -----
-        -- reaper.ImGui_SameLine(ctx, 0, 0)
-
         if reaper.ImGui_IsAnyItemHovered(ctx) then 
             sidebarFlags = reaper.ImGui_WindowFlags_NoScrollWithMouse()
         else
@@ -5049,14 +5123,14 @@ local function loop()
             obj_Control_Sidebar(ctx, keys, colorValues, mouse)
             reaper.ImGui_EndChild(ctx)
         end
-
+        
         reaper.ImGui_PopStyleColor(ctx, 1)
         reaper.ImGui_PopFont(ctx);
-
+        
         adjustCursorPos(ctx, 0, -27)
-
+        
         ---  BOTTOM ROW -----
-
+        
         if reaper.ImGui_BeginChild(ctx, 'Bottom Row', window_width , 323, false, reaper.ImGui_WindowFlags_NoScrollbar()) then
             adjustCursorPos(ctx, 126, 0)
             -- reaper.ImGui_Dummy(ctx, 0, 1 * size_modifier)
@@ -5067,17 +5141,18 @@ local function loop()
             
             reaper.ImGui_EndChild(ctx)
         end
-
-        reaper.ImGui_PopStyleVar(ctx, 1)
+        
         reaper.ImGui_End(ctx);
-        reaper.ImGui_PopStyleColor(ctx, 4);
-
+        
         if open then
             reaper.defer(loop);
         else
             Exit();
         end;
     end
+    reaper.ImGui_PopFont(ctx);
+    reaper.ImGui_PopStyleVar(ctx, 1)
+    reaper.ImGui_PopStyleColor(ctx, 4);
 end;
 
 reaper.defer(loop)
