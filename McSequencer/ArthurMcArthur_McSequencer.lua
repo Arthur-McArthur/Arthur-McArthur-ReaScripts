@@ -1,12 +1,11 @@
 -- @description Arthur McArthur McSequencer
 -- @author Arthur McArthur
 -- @license GPL v3
--- @version 1.1.7
+-- @version 1.1.8
 -- @changelog
 --  Fixed crash when undocking
 --  RS5K minimum velocity set to 0 by default
 --  Removed GUI scale option while resizing gets refactored for the new image system
-
 -- @provides
 --   Modules/*.lua
 --   Images/*.png
