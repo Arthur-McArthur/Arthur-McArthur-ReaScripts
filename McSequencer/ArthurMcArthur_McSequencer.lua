@@ -107,8 +107,8 @@ package.path = package.path .. ";" .. modules_path .. "?.lua"
 info = debug.getinfo(1, 'S')
 ------------------------------
 
-local themeEditor = dofile(script_path .. '/Modules/Theme Editor.lua')
-local params = dofile(script_path .. '/Modules/Object Params.lua')
+local themeEditor = dofile(script_path .. 'Modules/Theme Editor.lua')
+local params = dofile(script_path .. 'Modules/Object Params.lua')
 local colors = themeEditor(script_path, modules_path, themes_path)
 local serpent = require("serpent")
 
@@ -3160,7 +3160,6 @@ local function obj_Pattern_Controller(patternItems, ctx, mouse, keys, colorValue
             end
         end
     end
-
 
     local numSteps = math.floor(16 * 4 / snapAmount);
 
