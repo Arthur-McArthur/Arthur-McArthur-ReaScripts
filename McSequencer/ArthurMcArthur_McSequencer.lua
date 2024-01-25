@@ -6,6 +6,7 @@
 --  Fixed crash when undocking
 --  RS5K minimum velocity set to 0 by default
 --  Removed GUI scale option while resizing gets refactored for the new image system
+--  Fixed clickthrough on menus and preferences
 -- @provides
 --   Modules/*.lua
 --   Images/*.png
@@ -41,7 +42,6 @@ local function checkDependencies()
 
     return false
 end
-
 
 if checkDependencies() then return end
 
@@ -159,7 +159,6 @@ local originalSizeModifier, originalObjX, originalObjY
 local patternItemsCache = patternItemsCache or {}
 local showPopup = false
 local copiedValue
--- menu_open = nil
 local numberOfSliders = 64 -- Define how many sliders you want
 local sliderWidth = 20
 local sliderHeight = 269
@@ -2613,8 +2612,7 @@ end
 
 -- channel menu right click menu
 local function obj_Channel_Button_Menu(ctx, trackIndex, contextMenuID, patternItems, track_count)
-    -- menu_open = true
-    -- Open Midi Editor
+    -- Open in Midi Editor
     if reaper.ImGui_MenuItem(ctx, "Open in MIDI Editor") then
         openMidiEditor(trackIndex, patternItems)
         reaper.ImGui_CloseCurrentPopup(ctx) -- Close the context menu
@@ -2695,10 +2693,7 @@ local function obj_Channel_Button_Menu(ctx, trackIndex, contextMenuID, patternIt
         end
     end
 
-
     reaper.ImGui_EndPopup(ctx)
-    -- return menu_open
-    -- end
 end
 
 local function dragChannel()
@@ -2891,7 +2886,6 @@ local function obj_Channel_Button(ctx, track, actualTrackIndex, buttonIndex, mou
     if reaper.ImGui_BeginPopup(ctx, contextMenuID, reaper.ImGui_WindowFlags_NoMove()) then
         obj_Channel_Button_Menu(ctx, actualTrackIndex, contextMenuID, patternItems, track_count)
         menu_open[buttonIndex] = true
-        -- print(buttonIndex)
     elseif not reaper.ImGui_IsPopupOpen(ctx, contextMenuID) then
         menu_open[buttonIndex] = false
     end
@@ -3058,6 +3052,26 @@ local function obj_New_Pattern(ctx, patternItems, colorValues, maxPatternNumber,
     --
 end
 
+local function obj_Pattern_Length_Menu(ctx, patternItems, patternSelectSlider, lengthSlider)
+    if reaper.ImGui_MenuItem(ctx, "8") then
+        lengthSlider = 8
+        reaper.ImGui_CloseCurrentPopup(ctx) -- Close the context menu
+    end
+    if reaper.ImGui_MenuItem(ctx, "16") then
+        lengthSlider = 16
+        reaper.ImGui_CloseCurrentPopup(ctx) -- Close the context menu
+    end
+    if reaper.ImGui_MenuItem(ctx, "32") then
+        lengthSlider = 32
+        reaper.ImGui_CloseCurrentPopup(ctx) -- Close the context menu
+    end
+    if reaper.ImGui_MenuItem(ctx, "64") then
+        lengthSlider = 64
+        reaper.ImGui_CloseCurrentPopup(ctx) -- Close the context menu
+    end
+    reaper.ImGui_EndPopup(ctx)
+end
+
 -- Pattern controller
 local function obj_Pattern_Controller(patternItems, ctx, mouse, keys, colorValues)
     -- Determine the maximum pattern number among all retrieved pattern items.
@@ -3171,29 +3185,31 @@ local function obj_Pattern_Controller(patternItems, ctx, mouse, keys, colorValue
     local showPopupMenu = false
 
     if reaper.ImGui_IsItemClicked(ctx, 1) then
-        reaper.ImGui_OpenPopup(ctx, "patternLengthMenu")
-        
+        reaper.ImGui_OpenPopup(ctx, "patternLengthMenu")       
     end
 
     if reaper.ImGui_BeginPopup(ctx, "patternLengthMenu", reaper.ImGui_WindowFlags_NoMove()) then
-        if reaper.ImGui_MenuItem(ctx, "8") then
-            lengthSlider = 8
-            reaper.ImGui_CloseCurrentPopup(ctx) -- Close the context menu
-        end
-        if reaper.ImGui_MenuItem(ctx, "16") then
-            lengthSlider = 16
-            reaper.ImGui_CloseCurrentPopup(ctx) -- Close the context menu
-        end
-        if reaper.ImGui_MenuItem(ctx, "32") then
-            lengthSlider = 32
-            reaper.ImGui_CloseCurrentPopup(ctx) -- Close the context menu
-        end
-        if reaper.ImGui_MenuItem(ctx, "64") then
-            lengthSlider = 64
-            reaper.ImGui_CloseCurrentPopup(ctx) -- Close the context menu
-        end
-        -- menu_open[1] = true
-        reaper.ImGui_EndPopup(ctx)
+        obj_Pattern_Length_Menu(ctx, patternItems, patternSelectSlider, lengthSlider)
+        -- if reaper.ImGui_MenuItem(ctx, "8") then
+        --     lengthSlider = 8
+        --     reaper.ImGui_CloseCurrentPopup(ctx) -- Close the context menu
+        -- end
+        -- if reaper.ImGui_MenuItem(ctx, "16") then
+        --     lengthSlider = 16
+        --     reaper.ImGui_CloseCurrentPopup(ctx) -- Close the context menu
+        -- end
+        -- if reaper.ImGui_MenuItem(ctx, "32") then
+        --     lengthSlider = 32
+        --     reaper.ImGui_CloseCurrentPopup(ctx) -- Close the context menu
+        -- end
+        -- if reaper.ImGui_MenuItem(ctx, "64") then
+        --     lengthSlider = 64
+        --     reaper.ImGui_CloseCurrentPopup(ctx) -- Close the context menu
+        -- end
+        -- reaper.ImGui_EndPopup(ctx)
+        anyMenuOpen = true
+    -- elseif not reaper.ImGui_IsPopupOpen(ctx, "patternLengthMenu") then
+    --     anyMenuOpen = false
     end
 
     if not patternItems[patternSelectSlider] then
@@ -3869,6 +3885,7 @@ local function obj_PlayCursor_Buttons(ctx, mouse, keys, patternSelectSlider, col
     local currentBeat = math.floor(relativeCursorPosition / beatsInSec) + 1
     local button_left, button_top = reaper.ImGui_GetCursorScreenPos(ctx)
 
+    -- print(anyMenuOpen)
     for i = 1, lengthSlider do
         local isActiveBeat = currentBeat == i
 
@@ -3881,33 +3898,36 @@ local function obj_PlayCursor_Buttons(ctx, mouse, keys, patternSelectSlider, col
             currentImage = images.PlayCursor_off.i
         end
 
+        
         reaper.ImGui_Image(ctx, currentImage, images.PlayCursor_off.x, images.PlayCursor_off.y)
-
+        
         -- Calculate button positions
         local button_right = button_left + 20
         local button_bottom = button_top + 32
         local isMouseOverButton = mouse.mouse_x >= button_left and mouse.mouse_x <= button_right and
-                                  mouse.mouse_y >= button_top and mouse.mouse_y <= button_bottom
+        mouse.mouse_y >= button_top and mouse.mouse_y <= button_bottom
+        
+        if anyMenuOpen == false then
+            isHovered.PlayCursor[i] = isMouseOverButton
 
-        isHovered.PlayCursor[i] = isMouseOverButton
+            -- Check for mouse click or dragging over the button
+            if (reaper.ImGui_IsMouseReleased(ctx, 0) and isMouseOverButton) or 
+            (reaper.ImGui_IsMouseDragging(ctx, 0) and isMouseOverButton) then
+                local newCursorPosition = selectedItemPosition + (beatsInSec * (i - 1))
+                reaper.SetEditCurPos(newCursorPosition, true, true)
+            end
 
-        -- Check for mouse click or dragging over the button
-        if (reaper.ImGui_IsMouseReleased(ctx, 0) and isMouseOverButton) or 
-           (reaper.ImGui_IsMouseDragging(ctx, 0) and isMouseOverButton) then
-            local newCursorPosition = selectedItemPosition + (beatsInSec * (i - 1))
-            reaper.SetEditCurPos(newCursorPosition, true, true)
+            if isMouseOverButton and reaper.ImGui_IsMouseDoubleClicked(ctx, 0) then
+                reaper.GetSet_LoopTimeRange(1, 1, selectedItemPosition, selectedItemPosition + itemLength, 0)
+
+            end
         end
 
-        if isMouseOverButton and reaper.ImGui_IsMouseDoubleClicked(ctx, 0) then
-            reaper.GetSet_LoopTimeRange(1, 1, selectedItemPosition, selectedItemPosition + itemLength, 0)
-
-        end
-
-        -- Move to the next button position
-        if i ~= lengthSlider then
-            reaper.ImGui_SameLine(ctx, 0, 0)
-            button_left = button_left + 20
-        end
+            -- Move to the next button position
+            if i ~= lengthSlider then
+                reaper.ImGui_SameLine(ctx, 0, 0)
+                button_left = button_left + 20
+            end
     end
 end
 
@@ -4642,6 +4662,7 @@ end
 local function obj_Preferences(ctx)
     -- Check if the Preferences popup should be shown
     if showPreferencesPopup then
+        
         -- Store the original settings before any changes are made
         originalSizeModifier = size_modifier
         originalObjX = obj_x
@@ -4663,6 +4684,7 @@ local function obj_Preferences(ctx)
     end
 
     if reaper.ImGui_BeginPopupModal(ctx, 'PreferencesPopup', nil, reaper.ImGui_WindowFlags_AlwaysAutoResize()) then
+        anyMenuOpen = true
         -- local scalingFactor = 0.1
         -- local sliderIntValue = math.floor(size_modifier / scalingFactor + 0.5)
         -- local minValue = math.floor(0.8 / scalingFactor)
