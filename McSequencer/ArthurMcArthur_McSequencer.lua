@@ -1,7 +1,7 @@
 -- @description Arthur McArthur McSequencer
 -- @author Arthur McArthur
 -- @license GPL v3
--- @version 1.1.10
+-- @version 1.1.11
 -- @changelog
 --  Fixed crash when undocking
 --  RS5K minimum velocity set to 0 by default
@@ -2935,8 +2935,9 @@ local function obj_New_Pattern(ctx, patternItems, colorValues, maxPatternNumber,
     if reaper.ImGui_IsItemClicked(ctx, 1) then
         reaper.ImGui_OpenPopup(ctx, 'New Pattern')
     end
-
+    
     if reaper.ImGui_BeginPopup(ctx, 'New Pattern', reaper.ImGui_WindowFlags_NoMove()) then
+        anyMenuOpen = true
         if reaper.ImGui_MenuItem(ctx, "Duplicate all to new pattern") then
             reaper.PreventUIRefresh(1)
             unselectAllTracks()
