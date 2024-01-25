@@ -1,7 +1,7 @@
 -- @description Arthur McArthur McSequencer
 -- @author Arthur McArthur
 -- @license GPL v3
--- @version 1.1.9
+-- @version 1.1.10
 -- @changelog
 --  Fixed crash when undocking
 --  RS5K minimum velocity set to 0 by default
