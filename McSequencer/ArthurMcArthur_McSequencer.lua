@@ -111,7 +111,6 @@ local params = dofile(script_path .. 'Modules/Object Params.lua')
 local colors = themeEditor(script_path, modules_path, themes_path)
 local serpent = require("serpent")
 
-
 local CONFIG = {
     int_mousewheel_sensitivity = 1,
     int_mousewheel_sensitivity_fine = 1,
@@ -184,7 +183,6 @@ for i = 0, numberOfSliders - 1 do
     table.insert(slider, { value = value })
 end
 
-
 local channel = {
     channel_amount = {},
     GUID = {
@@ -246,8 +244,6 @@ local layout = {
     }
 }
 
-
-
 local function loadImageFiles(directory)
     local files = {}
     local i = 0
@@ -259,7 +255,6 @@ local function loadImageFiles(directory)
     end
     return files
 end
-
 
 local ctx = reaper.ImGui_CreateContext("McSequencer")
 
@@ -279,10 +274,6 @@ for _, fileName in ipairs(fileList) do
     local key = fileName:match("(.+)%..+")
     images[key] = { i = img, x = width, y = height }
 end
-
-
-
-
 
 ------------------------------------------------------ FUNCTIONS ----------------------------------------------
 
