@@ -3,6 +3,7 @@
 -- @license GPL v3
 -- @version 1.1.11
 -- @changelog
+--  Shift and left click/drag will delete notes
 --  Fixed crash when undocking
 --  RS5K minimum velocity set to 0 by default
 --  Removed GUI scale option while resizing gets refactored for the new image system
@@ -95,7 +96,6 @@ local function Exit()
     SetButtonState()
 end
 
-------------------]]
 dofile(reaper.GetResourcePath() .. '/Scripts/ReaTeam Extensions/API/imgui.lua')('0.8.7')
 local script_path = debug.getinfo(1, "S").source:match [[^@?(.*[\/])[^\/]-$]]
 local modules_path = script_path .. "Modules/"
@@ -173,6 +173,7 @@ local dragStartPos = {}
 local sequencerFlags
 local isClicked = {}
 local btnimg = {}
+local prefs = {}
 local isHovered = { PlayCursor = {}}
 local menu_open = {}
 local trackWasInserted 
@@ -508,14 +509,25 @@ local function goToLoopStart()
 end
 
 
+-- local function isAnyMenuOpen(menu_open)
+--     for _, isOpen in pairs(menu_open) do
+--         if isOpen then
+--             return true
+--         end
+--     end
+--     return false
+-- end
+
 local function isAnyMenuOpen(menu_open)
-    for _, isOpen in pairs(menu_open) do
-        if isOpen then
+    local numMenus = #menu_open
+    for i = 1, numMenus do
+        if menu_open[i] then
             return true
         end
     end
     return false
 end
+
 
 ----- GENERIC GUI OBJECT CLASS -----
 
@@ -3071,6 +3083,7 @@ local function obj_Pattern_Length_Menu(ctx, patternItems, patternSelectSlider, l
         reaper.ImGui_CloseCurrentPopup(ctx) -- Close the context menu
     end
     reaper.ImGui_EndPopup(ctx)
+    return lengthSlider
 end
 
 -- Pattern controller
@@ -3190,7 +3203,7 @@ local function obj_Pattern_Controller(patternItems, ctx, mouse, keys, colorValue
     end
 
     if reaper.ImGui_BeginPopup(ctx, "patternLengthMenu", reaper.ImGui_WindowFlags_NoMove()) then
-        obj_Pattern_Length_Menu(ctx, patternItems, patternSelectSlider, lengthSlider)
+        lengthSlider = obj_Pattern_Length_Menu(ctx, patternItems, patternSelectSlider, lengthSlider)
         -- if reaper.ImGui_MenuItem(ctx, "8") then
         --     lengthSlider = 8
         --     reaper.ImGui_CloseCurrentPopup(ctx) -- Close the context menu
@@ -3920,7 +3933,6 @@ local function obj_PlayCursor_Buttons(ctx, mouse, keys, patternSelectSlider, col
 
             if isMouseOverButton and reaper.ImGui_IsMouseDoubleClicked(ctx, 0) then
                 reaper.GetSet_LoopTimeRange(1, 1, selectedItemPosition, selectedItemPosition + itemLength, 0)
-
             end
         end
 
@@ -3950,7 +3962,7 @@ local function findOrCreateMidiItem(track, note_position, item_start, item_lengt
 end
 
 local function sequencer_Drag(mouse, keys, button_left, button_top, button_right, button_bottom, trackIndex, i, buttonId,
-                              midi_item, patternItems)
+                              midi_item, patternItems, active)
                               
     if mouse.drag_start_x and mouse.drag_start_y then
         local drag_area_left = math.min(mouse.drag_start_x, mouse.mouse_x)
@@ -3969,8 +3981,10 @@ local function sequencer_Drag(mouse, keys, button_left, button_top, button_right
         local sixteenth_note_length_secs = beat_length_secs / 8
 
         if trackIndex == active_lane then
+
             -- Process left-click events
-            if mouse.isMouseDownL and intersectL then
+            if mouse.isMouseDownL and intersectL and buttonStates[trackIndex][i] == false  and not leftDragging then
+                -- print('asds')
                 if not processedButtons[buttonId] then -- If button is not processed, insert note
                     local note_position = item_start + (i - 1) * beatsInSec / time_resolution
                     local midi_item = findOrCreateMidiItem(track, note_position, item_start, item_length_secs)
@@ -3989,9 +4003,15 @@ local function sequencer_Drag(mouse, keys, button_left, button_top, button_right
                     end
                 end
             end
-
+  
             -- Process right-click events
             if mouse.isMouseDownR and intersectL then
+                deleteMidiNote(trackIndex, i, patternSelectSlider, patternItems)
+                processedButtons[buttonId] = nil -- Reset button state on right-click
+            end
+
+            -- Process right-click events
+            if keys.shiftDown and mouse.isMouseDownL and intersectL then
                 deleteMidiNote(trackIndex, i, patternSelectSlider, patternItems)
                 processedButtons[buttonId] = nil -- Reset button state on right-click
             end
@@ -4119,7 +4139,7 @@ local function obj_Sequencer_Buttons(ctx, trackIndex, mouse, keys, pattern_item,
         local colorBlue = isDarkerBlock and images.Step_odd_off.i  or images.Step_even_off.i 
         local colorDarkBlue = isDarkerBlock and images.Step_odd_on.i  or images.Step_even_on.i 
         local step_img = buttonStates[trackIndex][i] and colorDarkBlue or colorBlue
-
+        -- local active = buttonStates[trackIndex][i]
         -- local note_count = countNotesInStep(note_positions, step_start, step_end) -- Function to count notes in the step
 
         -- local buttonWidth, buttonHeight = obj_x, obj_y
@@ -4134,6 +4154,7 @@ local function obj_Sequencer_Buttons(ctx, trackIndex, mouse, keys, pattern_item,
         --         reaper.ImGui_SetCursorPosX(ctx, cursor - (n*4))
 
         -- end
+
         
         reaper.ImGui_Image(ctx, step_img, images.Step_odd_off.x, images.Step_odd_off.y)
 
@@ -4171,8 +4192,9 @@ local function obj_Sequencer_Buttons(ctx, trackIndex, mouse, keys, pattern_item,
             -- end
             
             
+            
             sequencer_Drag(mouse, keys, button_left, button_top, button_right, button_bottom, trackIndex, i,
-                trackIndex .. '_' .. i, midi_item, patternItems)
+                trackIndex .. '_' .. i, midi_item, patternItems, active)
         end
     end
     -- reaper.ImGui_EndGroup(ctx)
@@ -4665,6 +4687,7 @@ local function obj_Preferences(ctx)
     if showPreferencesPopup then
         
         -- Store the original settings before any changes are made
+        originalLeftClickDelete = leftClickDelete
         originalSizeModifier = size_modifier
         originalObjX = obj_x
         originalObjY = obj_y
@@ -4686,6 +4709,17 @@ local function obj_Preferences(ctx)
 
     if reaper.ImGui_BeginPopupModal(ctx, 'PreferencesPopup', nil, reaper.ImGui_WindowFlags_AlwaysAutoResize()) then
         anyMenuOpen = true
+
+        -- if reaper.ImGui_Checkbox(ctx, 'Left Click Delete', leftClickDelete) then
+        --     leftClickDelete = not leftClickDelete -- Set vfindTempoMarker based on the new state
+        -- end
+
+        -- reaper.ImGui_SameLine(ctx)
+        -- reaper.ImGui_Text(ctx, '(?)')
+        -- if reaper.ImGui_IsItemHovered(ctx) then
+        --     reaper.ImGui_SetTooltip(ctx, "Left clicks or drags on sequener buttons that have notes in them will start deleting notes. Useful for laptop trackpad users.")
+        -- end
+
         -- local scalingFactor = 0.1
         -- local sliderIntValue = math.floor(size_modifier / scalingFactor + 0.5)
         -- local minValue = math.floor(0.8 / scalingFactor)
@@ -4705,20 +4739,22 @@ local function obj_Preferences(ctx)
 
         _, time_resolution = reaper.ImGui_SliderInt(ctx, "Time resolution", time_resolution, 2, 12)
 
-        if reaper.ImGui_Button(ctx, 'Reset to default', 120, 0) then
-            local keysToDelete = { "SizeModifier", "ObjX", "ObjY", "TimeResolution", "Find Tempo Marker", "Font Size",
-                "Font Size Sidebar Buttons", "themeLastLoadedPath" }                                                                                                      -- Replace with your actual key names
+        -- if reaper.ImGui_Button(ctx, 'Reset to default', 120, 0) then
+        --     local keysToDelete = { "SizeModifier", "ObjX", "ObjY", "TimeResolution", "Find Tempo Marker", "Font Size",
+        --         "Font Size Sidebar Buttons", "themeLastLoadedPath" }                                                                                                      -- Replace with your actual key names
 
-            for _, key in ipairs(keysToDelete) do
-                reaper.DeleteExtState("McSequencer", key, true)
-            end
-            reaper.ImGui_CloseCurrentPopup(ctx)
-        end
+        --     for _, key in ipairs(keysToDelete) do
+        --         reaper.DeleteExtState("McSequencer", key, true)
+        --     end
+        --     reaper.ImGui_CloseCurrentPopup(ctx)
+        -- end
 
 
         -- OK button logic
         if reaper.ImGui_Button(ctx, 'OK', 120, 0) then
             -- Save the modified settings to ExtState
+            
+            reaper.SetExtState("McSequencer", "leftClickDelete", tostring(leftClickDelete), true)
             reaper.SetExtState("McSequencer", "SizeModifier", tostring(size_modifier), true)
             reaper.SetExtState("McSequencer", "ObjX", tostring(obj_x), true)
             reaper.SetExtState("McSequencer", "ObjY", tostring(obj_y), true)
@@ -4733,6 +4769,7 @@ local function obj_Preferences(ctx)
         -- Cancel button logic
         if reaper.ImGui_Button(ctx, 'Cancel', 120, 0) then
             -- Revert to original settings
+            leftClickDelete = originalLeftClickDelete
             size_modifier = originalSizeModifier
             obj_x = originalObjX
             obj_y = originalObjY
@@ -4756,6 +4793,9 @@ local function getPreferences()
     if not obj_y then obj_y = 34 end
     local time_resolution = tonumber(reaper.GetExtState("McSequencer", "TimeResolution"))
     if not time_resolution then time_resolution = 4 end
+    local leftClickDelete = reaper.GetExtState("McSequencer", "leftClickDelete")
+    local leftClickDelete = (leftClickDelete == "true") --
+    if not leftClickDelete then leftClickDelete = false end
     local vfindTempoMarkerStr = reaper.GetExtState("McSequencer", "Find Tempo Marker")
     local vfindTempoMarker = (vfindTempoMarkerStr == "true") --
     if not vfindTempoMarkerStr then vfindTempoMarkerStr = false end
@@ -4764,7 +4804,7 @@ local function getPreferences()
     local fontSidebarButtonsSize = tonumber(reaper.GetExtState("McSequencer", "Font Size Sidebar Buttons"))
     if not fontSidebarButtonsSize then fontSidebarButtonsSize = 14 end
 
-    return size_modifier, obj_x, obj_y, time_resolution, vfindTempoMarker, fontSize, fontSidebarButtonsSize
+    return size_modifier, obj_x, obj_y, time_resolution, vfindTempoMarker, fontSize, fontSidebarButtonsSize, leftClickDelete
 end
 local function obj_HoveredInfo(ctx, hoveredControlInfo)
     local displayText
@@ -4817,7 +4857,7 @@ retrieveExtState()
 load_channel_data()
 local colorValues = colors.colorUpdate()
 params.getinfo(script_path, modules_path, themes_path)
-size_modifier, obj_x, obj_y, time_resolution, vfindTempoMarker, fontSize, fontSidebarButtonsSize = getPreferences()
+size_modifier, obj_x, obj_y, time_resolution, vfindTempoMarker, fontSize, fontSidebarButtonsSize, leftClickDelete = getPreferences()
 local font_path = script_path .. "/Fonts/Segoe UI.ttf"
 local font = reaper.ImGui_CreateFont(font_path, fontSize)
 font_SidebarSampleTitle = reaper.ImGui_CreateFont(font_path, fontSidebarButtonsSize + 4)
