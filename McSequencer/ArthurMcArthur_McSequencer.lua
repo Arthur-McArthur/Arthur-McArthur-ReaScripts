@@ -1,13 +1,13 @@
 -- @description Arthur McArthur McSequencer
 -- @author Arthur McArthur
 -- @license GPL v3
--- @version 1.1.11
+-- @version 1.1.12
 -- @changelog
 --  Shift and left click/drag will delete notes
---  Fixed crash when undocking
---  RS5K minimum velocity set to 0 by default
---  Removed GUI scale option while resizing gets refactored for the new image system
---  Fixed clickthrough on menus and preferences
+--  Fixed updating of channel button when importing
+--  Fixed crash related to importing
+--  Fixed pattern slider not updating to maximum value when adding new pattern
+--  Added keyboard shortcuts: F4 to insert new pattern, numpad + to switch to next pattern, numpad - to switch to previous pattern
 -- @provides
 --   Modules/*.lua
 --   Images/*.png
@@ -624,7 +624,11 @@ local function obj_Knob2(ctx, imageParams, id, value, params, mouse, keys, yOffs
     local overallSensitivity = 250
 
     -- Transform the value to a curved scale
-    if not value then return end
+    if not value then 
+        update_requiered = true 
+        return 
+    end
+    
     local normalizedValue = (value - params.min) / (params.max - params.min)
     local curvedValue = normalizedValue ^ params.scaling
     -- Mouse drag logic
@@ -1096,35 +1100,33 @@ end
 ---- PATTERN ITEMS  ---------------------------------
 
 local function getPatternItems(track_count)
-    --[[
-    -- Check if result is already cached
-    if patternItemsCache[track_suffix] then
-        return patternItemsCache[track_suffix]
-    end
-    ]]
-
-
     local patternItems = {}
-    -- local track_count = reaper.CountTracks(0)
     local trackNameToMatch = "Patterns" .. track_suffix
-    local patternTrackIndex = nil -- Variable to store the name of the matched track
+    local patternTrackIndex = nil
     local patternTrack = nil
+    local maxPatternNumber = 0  -- Variable to track the highest pattern number
 
     for i = 0, track_count - 1 do
         local track = reaper.GetTrack(0, i)
         local _, trackName = reaper.GetTrackName(track)
 
-        -- Check if the track name matches "Patterns" followed by track_suffix
         if trackName == trackNameToMatch then
-            patternTrackIndex = i -- Store the matched track name
+            patternTrackIndex = i
             patternTrack = track
             local itemCount = reaper.CountTrackMediaItems(track)
+
             for j = 0, itemCount - 1 do
                 local item = reaper.GetTrackMediaItem(track, j)
                 local take = reaper.GetActiveTake(item)
                 local _, itemName = reaper.GetSetMediaItemTakeInfo_String(take, "P_NAME", "", false)
                 local patternNumber = tonumber(itemName:match("^Pattern (%d+)"))
+
                 if patternNumber then
+                    -- Update maxPatternNumber if a higher number is found
+                    if patternNumber > maxPatternNumber then
+                        maxPatternNumber = patternNumber
+                    end
+
                     if not patternItems[patternNumber] then
                         patternItems[patternNumber] = {}
                     end
@@ -1134,10 +1136,9 @@ local function getPatternItems(track_count)
         end
     end
 
-    -- Store the result in the cache
-    -- patternItemsCache[track_suffix] = patternItems
-    return patternItems, patternTrackIndex, patternTrack
+    return patternItems, patternTrackIndex, patternTrack, maxPatternNumber
 end
+
 local function getSelectedPatternItemAndMidiItem(trackIndex, patternItems, patternSelectSlider)
     local selectedPatternData = patternItems[patternSelectSlider]
     if not (selectedPatternData and selectedPatternData[1]) then
@@ -1343,10 +1344,10 @@ local function newPatternItem(maxPatternNumber)
         end
         reaper.SetMediaItemSelected(newItem, true)
     else
-        reaper.ShowMessageBox("Unable to identify the duplicated item.", "Error", 0)
+        -- reaper.ShowMessageBox("Unable to identify the duplicated item.", "Error", 0)
     end
 
-    -- patternSelectSlider = maxPatternNumber + 1
+    patternSelectSlider = maxPatternNumber + 1
 
     reaper.Undo_EndBlock("Duplicate and rename pattern", -1)
     reaper.UpdateArrange()
@@ -2433,11 +2434,22 @@ local function insertNewTrack(filename, track_suffix, track_count)
             -- Load the dropped file into RS5k
             reaper.TrackFX_SetNamedConfigParm(new_track, rs5k_index, "FILE0", filename)
             reaper.TrackFX_SetNamedConfigParm(new_track, rs5k_index, "DONE", "")
-            -- Update channel data
-            update_required = true
-            update_channel_data_from_reaper(track_suffix)
+            -- Determine the new buttonIndex for the created track
+            local newButtonIndex = #channel.GUID.name + 1
+
+            -- Update channel data with the new track's information
+            local trackName = filename:match("^.+[\\/](.+)$")
+            trackName = trackName:gsub("%.wav$", "")
+            channel.GUID.name[newButtonIndex] = trackName
+            channel.GUID.file_path[newButtonIndex] = filename
+
+            -- Update selectedChannelButton and selectedButtonIndex
+            unselectAllTracks()
+            reaper.SetTrackSelected(new_track, true)
             selectedChannelButton = insert_track_index
-            selectOnlyTrack(insert_track_index)
+            selectedButtonIndex = newButtonIndex
+            reaper.SetExtState("McSequencer", "selectedChannelButton", tostring(insert_track_index), true)
+            reaper.SetExtState("McSequencer", "selectedButtonIndex", tostring(newButtonIndex), true)
 
         else
             -- Handle track creation error
@@ -2756,7 +2768,7 @@ local function dragChannel()
     --     reaper.ImGui_EndDragDropTarget(ctx)
 end
 
-
+-- Channel Button
 local function obj_Channel_Button(ctx, track, actualTrackIndex, buttonIndex, mouse, patternItems, track_count, colorValues, mouse, keys)
 
     local buttonName = shorten_name(channel.GUID.name[buttonIndex] or " ", track_suffix) 
@@ -2770,6 +2782,15 @@ local function obj_Channel_Button(ctx, track, actualTrackIndex, buttonIndex, mou
 
     -- Draw the image
     reaper.ImGui_Image(ctx, image.i, image.x, image.y)
+
+    -- reaper.ImGui_Button(ctx, 'asds')
+--     if reaper.ImGui_BeginDragDropTarget(ctx) then
+--     local rv, payload = reaper.ImGui_AcceptDragDropPayloadFiles(ctx, nil, reaper.ImGui_DragDropFlags_AcceptBeforeDelivery())
+--     if rv then
+--       reaper.ShowConsoleMsg('hovered\n')
+--     end
+--     reaper.ImGui_EndDragDropTarget(ctx)
+--   end
 
     -- Calculate the position for the centered text
     local textWidth, textHeight = reaper.ImGui_CalcTextSize(ctx, buttonName)
@@ -2791,14 +2812,18 @@ local function obj_Channel_Button(ctx, track, actualTrackIndex, buttonIndex, mou
         end
     end
 
+    local function selectChannelButton(ctx, track, actualTrackIndex, buttonIndex)
+        unselectAllTracks()
+        reaper.SetTrackSelected(track, true)
+        selectedChannelButton = actualTrackIndex
+        selectedButtonIndex = buttonIndex
+        reaper.SetExtState("McSequencer", "selectedChannelButton", tostring(selectedChannelButton), true)
+        reaper.SetExtState("McSequencer", "selectedButtonIndex", tostring(buttonIndex), true)
+    end
+
     if active_lane == nil then
         if reaper.ImGui_IsItemClicked(ctx, 0) then
-            unselectAllTracks()
-            reaper.SetTrackSelected(track, true)
-            selectedChannelButton = actualTrackIndex
-            selectedButtonIndex = buttonIndex
-            reaper.SetExtState("McSequencer", "selectedChannelButton", tostring(selectedChannelButton), true)
-            reaper.SetExtState("McSequencer", "selectedButtonIndex", tostring(buttonIndex), true)
+            selectChannelButton(ctx, track, actualTrackIndex, buttonIndex)
         end
     end
 
@@ -2813,7 +2838,7 @@ local function obj_Channel_Button(ctx, track, actualTrackIndex, buttonIndex, mou
 
     -- Check if this button is the last one and update the global variable
     if buttonIndex == #channel.GUID.trackIndex then -- Assuming this is the last index
-        lastButtonBottomY = buttonBottomY
+        lastButtonBottomY = buttonBottomY 
     end
 
     if active_lane and mouse.isMouseDownR then
@@ -2821,6 +2846,7 @@ local function obj_Channel_Button(ctx, track, actualTrackIndex, buttonIndex, mou
     end
 
     if reaper.ImGui_BeginDragDropTarget(ctx) then
+
         reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_DragDropTarget(), colorValues.color33_channelbutton_dropped)
         local rv, count = reaper.ImGui_AcceptDragDropPayloadFiles(ctx)
         if rv then
@@ -2876,6 +2902,9 @@ local function obj_Channel_Button(ctx, track, actualTrackIndex, buttonIndex, mou
                         reaper.TrackFX_SetNamedConfigParm(track, rs5k_index, "FILE0", filename)
                         reaper.TrackFX_SetNamedConfigParm(track, rs5k_index, "DONE", "")
                     end
+
+                    selectChannelButton(ctx, track, actualTrackIndex, buttonIndex)
+
                 end
             end
         end
@@ -3087,21 +3116,23 @@ local function obj_Pattern_Length_Menu(ctx, patternItems, patternSelectSlider, l
 end
 
 -- Pattern controller
-local function obj_Pattern_Controller(patternItems, ctx, mouse, keys, colorValues)
+local function obj_Pattern_Controller(patternItems, ctx, mouse, keys, colorValues, track_count, maxPatternNumber)
     -- Determine the maximum pattern number among all retrieved pattern items.
-    local maxPatternNumber = 0;
+    -- maxPatternNumber = 0;
 
     -- for patternNumber = 1, #patternItems do
     --     maxPatternNumber = math.max(maxPatternNumber, patternNumber);
     -- end;
-    for patternNumber, _ in pairs(patternItems) do
-        maxPatternNumber = math.max(maxPatternNumber, patternNumber);
-    end;
+    -- for patternNumber, _ in pairs(patternItems) do
+    --     maxPatternNumber = math.max(maxPatternNumber, patternNumber);
+    -- end;
 
     -- Get the last selected pattern number from REAPER's extended state or default to 1.
     local lastSelectedPattern = tonumber(reaper.GetExtState("PatternController", "lastSelectedPattern")) or 1;
     -- Use the last selected pattern number to initialize the pattern selection slider, if not already set.
     patternSelectSlider = patternSelectSlider or 1;
+
+
 
     -- Prepare and retrieve snapping settings from REAPER's extended state.
     local extStateSection = "PatternControllerSnapSettings";
@@ -3336,11 +3367,15 @@ local function obj_Pattern_Controller(patternItems, ctx, mouse, keys, colorValue
         reaper.UpdateArrange()
     end
 
+    if newPatternUpdate then 
+        patternSelectSlider = maxPatternNumber + 1
+        newPatternUpdate = false
+    end
+
     -- Store the current length slider value for future comparisons.
     prevLengthSlider = lengthSlider;
     return selectedItemStartPos, maxPatternNumber
 end
-
 
 local function get_pcm_source_peaks(pcmSource, disp_w)
     if not pcmSource then return nil, 0 end
@@ -3434,8 +3469,6 @@ local function waveformDisplay(ctx, pcm, sample_path, keys, colorValues, mouse)
         end
 
     end
-
-
 end
 
 local function obj_Control_Sidebar(ctx, keys, colorValues, mouse)
@@ -3449,6 +3482,7 @@ local function obj_Control_Sidebar(ctx, keys, colorValues, mouse)
 
     local track = reaper.GetTrack(0, trackIndex)
     if not track then
+        update_required = true
         return
     end
 
@@ -3984,7 +4018,6 @@ local function sequencer_Drag(mouse, keys, button_left, button_top, button_right
 
             -- Process left-click events
             if mouse.isMouseDownL and intersectL and buttonStates[trackIndex][i] == false  and not leftDragging then
-                -- print('asds')
                 if not processedButtons[buttonId] then -- If button is not processed, insert note
                     local note_position = item_start + (i - 1) * beatsInSec / time_resolution
                     local midi_item = findOrCreateMidiItem(track, note_position, item_start, item_length_secs)
@@ -4315,6 +4348,7 @@ local function obj_Add_Channel_Button(track_suffix, ctx, count_tracks, colorValu
                 local filename
                 rv, filename = reaper.ImGui_GetDragDropPayloadFile(ctx, i)
                 insertNewTrack(filename, track_suffix, count_tracks)
+                update_required = true
             end
             trackWasInserted = true
         end
@@ -4344,6 +4378,7 @@ local function obj_Invisible_Channel_Button(track_suffix, ctx, count_tracks, col
                 rv, filename = reaper.ImGui_GetDragDropPayloadFile(ctx, i)
                 insertNewTrack(filename, track_suffix, count_tracks)
                 trackWasInserted = true
+                update_required = true
             end
         end
     
@@ -4555,7 +4590,7 @@ end
 
 
 
-local function keyboard_shortcuts(ctx, patternItems, patternSelectSlider)
+local function keyboard_shortcuts(ctx, patternItems, maxPatternNumber)
     local keyMods = reaper.ImGui_GetKeyMods(ctx)
     local altDown = keyMods == reaper.ImGui_Mod_Alt()
     local ctrlDown = keyMods == reaper.ImGui_Mod_Ctrl()
@@ -4566,9 +4601,25 @@ local function keyboard_shortcuts(ctx, patternItems, patternSelectSlider)
     local ctrlAltShiftDown = keyMods == reaper.ImGui_Mod_Ctrl() | reaper.ImGui_Mod_Shift() | reaper.ImGui_Mod_Alt()
 
     if reaper.ImGui_IsKeyPressed(ctx, reaper.ImGui_Key_Escape()) then
-
         open = false
+    end
 
+    -- Numpad plus select next pattern
+    if reaper.ImGui_IsKeyPressed(ctx, reaper.ImGui_Key_KeypadAdd())  then
+        patternSelectSlider = patternSelectSlider + 1
+    end
+
+    -- Numpad minus select previous pattern
+    if reaper.ImGui_IsKeyPressed(ctx, reaper.ImGui_Key_KeypadSubtract())  then
+        if patternSelectSlider ~= 1 then
+            patternSelectSlider = patternSelectSlider - 1
+        end
+    end
+
+    -- F4 create new pattern
+    if reaper.ImGui_IsKeyPressed(ctx, reaper.ImGui_Key_F4()) then
+        newPatternItem(maxPatternNumber)
+        newPatternUpdate = true
     end
 
     if anyMenuOpen == false then
@@ -4903,9 +4954,9 @@ local function loop()
     
     if visible then
         local track_count = reaper.CountTracks(0)
-        local patternItems, patternTrackIndex, patternTrack = getPatternItems(track_count)
+        local patternItems, patternTrackIndex, patternTrack, maxPatternNumber = getPatternItems(track_count)
         local mouse = mouseTrack(ctx)
-        local keys = keyboard_shortcuts(ctx, patternItems, patternSelectSlider)
+        local keys = keyboard_shortcuts(ctx, patternItems, maxPatternNumber)
         local channel = update(ctx, track_count, track_suffix, channel)
         local window_width = reaper.ImGui_GetWindowWidth(ctx)
         local window_height = reaper.ImGui_GetWindowHeight(ctx)
@@ -4972,7 +5023,7 @@ local function loop()
             -- pattern controller
             
             local selectedItemStartPos, maxPatternNumber = obj_Pattern_Controller(patternItems, ctx,
-                mouse, keys, colorValues, track_count);
+                mouse, keys, colorValues, track_count, maxPatternNumber);
 
             if vfindTempoMarker and selectedItemStartPos then
                 local index, time, timesigNum, timesigDenom = findTempoMarkerFromPosition(selectedItemStartPos)

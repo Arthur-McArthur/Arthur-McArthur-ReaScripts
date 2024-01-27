@@ -35,7 +35,7 @@ local function printTable(t, indent, parentKey)
 end
 
 return function(script_path, resources_path, themes_path)
-    local M = {}
+    local M = {}        
 
     package.path = package.path .. ";" .. resources_path .. "?.lua"
     local serpent = require("serpent")
