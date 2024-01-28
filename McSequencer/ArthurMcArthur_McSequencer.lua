@@ -4,7 +4,6 @@
 -- @version 1.1.13
 -- @changelog
 --  Disable pattern length limit
-
 --  Fix duplicate actions
 --  Display version number in window
 --  Fix New Pattern bugs
