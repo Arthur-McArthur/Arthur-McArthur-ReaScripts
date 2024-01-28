@@ -1,7 +1,7 @@
 -- @description Arthur McArthur McSequencer
 -- @author Arthur McArthur
 -- @license GPL v3
--- @version 1.1.13
+-- @version 1.1.14
 -- @changelog
 --  Disable pattern length limit
 --  Fix duplicate actions
@@ -16,7 +16,7 @@
 --   Fonts/*.ttf
 --   [effect] JSFX/*.jsfx
 
-local versionNumber = '1.1.13'
+local versionNumber = '1.1.14'
 local reaper = reaper
 local os = reaper.GetOS()
 
