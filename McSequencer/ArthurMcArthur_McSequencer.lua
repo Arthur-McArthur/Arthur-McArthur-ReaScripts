@@ -3,6 +3,7 @@
 -- @license GPL v3
 -- @version 1.1.14
 -- @changelog
+--  Fixed font inclusion
 --  Disable pattern length limit
 --  Fix duplicate actions
 --  Display version number in window
@@ -13,7 +14,7 @@
 --   Images/*.png
 --   JSFX/*.jsfx
 --   Themes/*.txt
---   Fonts/*.ttf
+--   Fonts/*.ttc
 --   [effect] JSFX/*.jsfx
 
 local versionNumber = '1.1.14'
