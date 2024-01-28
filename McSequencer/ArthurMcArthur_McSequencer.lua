@@ -1,7 +1,7 @@
 -- @description Arthur McArthur McSequencer
 -- @author Arthur McArthur
 -- @license GPL v3
--- @version 1.1.15
+-- @version 1.1.16
 -- @changelog
 --  Fixed font inclusion
 --  Disable pattern length limit
@@ -17,7 +17,7 @@
 --   Fonts/*.ttc
 --   [effect] JSFX/*.jsfx
 
-local versionNumber = '1.1.15'
+local versionNumber = '1.1.16'
 local reaper = reaper
 local os = reaper.GetOS()
 
@@ -4870,9 +4870,9 @@ local function getPreferences()
     local vfindTempoMarker = (vfindTempoMarkerStr == "true") --
     if not vfindTempoMarkerStr then vfindTempoMarkerStr = false end
     local fontSize = tonumber(reaper.GetExtState("McSequencer", "Font Size"))
-    if not fontSize then fontSize = 14 end
+    if not fontSize then fontSize = 12 end
     local fontSidebarButtonsSize = tonumber(reaper.GetExtState("McSequencer", "Font Size Sidebar Buttons"))
-    if not fontSidebarButtonsSize then fontSidebarButtonsSize = 14 end
+    if not fontSidebarButtonsSize then fontSidebarButtonsSize = 12 end
 
     return size_modifier, obj_x, obj_y, time_resolution, vfindTempoMarker, fontSize, fontSidebarButtonsSize, leftClickDelete
 end
