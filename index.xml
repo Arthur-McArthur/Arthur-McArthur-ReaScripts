@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="Arthur McArthur ReaScripts" commit="f9aece490bd0feb35cdfbf3d5a5cf988282d5a89">
+<index version="1" name="Arthur McArthur ReaScripts" commit="ae485bc5b9593a986172e53d67bf18f3a6463b70">
   <category name="McSequencer">
     <reapack name="ArthurMcArthur_McSequencer.lua" type="script" desc="Arthur McArthur McSequencer">
       <version name="1.1" author="Arthur McArthur" time="2024-01-22T07:03:25Z">
@@ -973,6 +973,10 @@ Added keyboard shortcuts: F4 to insert new pattern, numpad + to switch to next p
         <source file="Fonts/Segoe UI.ttf">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/f9aece490bd0feb35cdfbf3d5a5cf988282d5a89/McSequencer/Fonts/Segoe%20UI.ttf</source>
         <source type="effect" file="JSFX/MIDI Note Sender.jsfx">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/f9aece490bd0feb35cdfbf3d5a5cf988282d5a89/McSequencer/JSFX/MIDI%20Note%20Sender.jsfx</source>
         <source type="effect" file="JSFX/swing.jsfx">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/f9aece490bd0feb35cdfbf3d5a5cf988282d5a89/McSequencer/JSFX/swing.jsfx</source>
+      </version>
+      <version name="1.1.13" author="Arthur McArthur" time="2024-01-28T05:01:49Z">
+        <changelog><![CDATA[Disable pattern length limit]]></changelog>
+        <source main="main">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/ae485bc5b9593a986172e53d67bf18f3a6463b70/McSequencer/ArthurMcArthur_McSequencer.lua</source>
       </version>
     </reapack>
   </category>
