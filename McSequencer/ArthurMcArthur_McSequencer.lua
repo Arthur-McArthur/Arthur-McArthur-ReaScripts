@@ -1,14 +1,10 @@
 -- @description Arthur McArthur McSequencer
 -- @author Arthur McArthur
 -- @license GPL v3
--- @version 1.1.16
+-- @version 1.1.17
 -- @changelog
---  Fixed font inclusion
---  Disable pattern length limit
---  Fix duplicate actions
---  Display version number in window
---  Fix New Pattern bugs
---  Fix window opening too small on startup
+--  Open MIDI Editor will add a new item if one doesn't exist
+--  Fill every x steps will now insert pooled midi items for all instances of the pattern
 -- @provides
 --   Modules/*.lua
 --   Images/*.png
@@ -17,7 +13,7 @@
 --   Fonts/*.ttc
 --   [effect] JSFX/*.jsfx
 
-local versionNumber = '1.1.16'
+local versionNumber = '1.1.17'
 local reaper = reaper
 local os = reaper.GetOS()
 
@@ -1515,7 +1511,7 @@ local function insertMidiNote(trackIndex, buttonIndex, pitch, velocity, note_len
 
     reaper.UpdateArrange()
 end
-local function insertMidiPooledItems(trackIndex, patternSelectSlider, patternItems)
+local function insertMidiPooledItems(trackIndex, patternSelectSlider, patternItems, createNew)
     reaper.Undo_BeginBlock()
     reaper.PreventUIRefresh(1)
     local cursor_pos = reaper.GetCursorPosition()
@@ -1524,6 +1520,12 @@ local function insertMidiPooledItems(trackIndex, patternSelectSlider, patternIte
 
     -- Get the track at the specified index
     local targetTrack = reaper.GetTrack(0, trackIndex) -- Track index is 0-based
+
+    if createNew == true then
+        local itemStart = reaper.GetMediaItemInfo_Value(patternMediaItems[1], "D_POSITION")
+        local itemEnd = itemStart + reaper.GetMediaItemInfo_Value(patternMediaItems[1], "D_LENGTH")
+        reaper.CreateNewMIDIItemInProj(targetTrack, itemStart, itemEnd, false)
+    end
 
     for _, patternItem in ipairs(patternMediaItems) do
         -- Get the start and end times for the pattern item
@@ -1541,8 +1543,7 @@ local function insertMidiPooledItems(trackIndex, patternSelectSlider, patternIte
             if midiItemStart < itemEnd and midiItemEnd > itemStart then
                 existingMidiItemFound = true
                 reaper.Main_OnCommand(40289, 0) -- unselect all items
-                --local nil_item = nil
-                --reaper.SetMediaItemSelected(nil_item,1)
+
                 reaper.SetMediaItemSelected(item, 1)
                 reaper.Main_OnCommand(40698, 0) -- copy item
 
@@ -1554,14 +1555,13 @@ local function insertMidiPooledItems(trackIndex, patternSelectSlider, patternIte
         if not existingMidiItemFound then
             reaper.SetOnlyTrackSelected(targetTrack)
             reaper.SetEditCurPos(itemStart, false, false)
-            reaper.Main_OnCommand(41072, 0) -- paste item pooled
+
+                reaper.Main_OnCommand(41072, 0) -- paste item pooled
+
         end
     end
     reaper.SetEditCurPos(cursor_pos, false, false)
     reaper.PreventUIRefresh(-1)
-
-
-
     reaper.Undo_EndBlock('Insert MIDI Notes', -1)
 end
 
@@ -2681,6 +2681,8 @@ end
 local function obj_Channel_Button_Menu(ctx, trackIndex, contextMenuID, patternItems, track_count)
     -- Open in Midi Editor
     if reaper.ImGui_MenuItem(ctx, "Open in MIDI Editor") then
+        insertMidiPooledItems(trackIndex, patternSelectSlider, patternItems, true)
+
         openMidiEditor(trackIndex, patternItems)
         reaper.ImGui_CloseCurrentPopup(ctx) -- Close the context menu
     end
@@ -2714,6 +2716,7 @@ local function obj_Channel_Button_Menu(ctx, trackIndex, contextMenuID, patternIt
                 insertMidiNote(trackIndex, i, 60, 100, 0.125, patternSelectSlider, nil, nil, track_count) -- Insert a note on every other step
             end
         end
+        insertMidiPooledItems(trackIndex, patternSelectSlider, patternItems)
         undoPoint2('Fill every 2 steps', track, item)
         reaper.ImGui_CloseCurrentPopup(ctx) -- Close the context menu
 
@@ -2727,6 +2730,7 @@ local function obj_Channel_Button_Menu(ctx, trackIndex, contextMenuID, patternIt
                 insertMidiNote(trackIndex, i, 60, 100, 0.125, patternSelectSlider, nil, nil, track_count) -- Insert a note on every other step
             end
         end
+        insertMidiPooledItems(trackIndex, patternSelectSlider, patternItems)
         undoPoint2('Fill every 4 steps', track, item)
         reaper.ImGui_CloseCurrentPopup(ctx) -- Close the context menu
     end
@@ -2738,6 +2742,7 @@ local function obj_Channel_Button_Menu(ctx, trackIndex, contextMenuID, patternIt
                 insertMidiNote(trackIndex, i, 60, 100, 0.125, patternSelectSlider, nil, nil, track_count) -- Insert a note on every other step
             end
         end
+        insertMidiPooledItems(trackIndex, patternSelectSlider, patternItems)
         undoPoint2('Fill every 8 steps', track, item)
         reaper.ImGui_CloseCurrentPopup(ctx) -- Close the context menu
     end
@@ -4056,7 +4061,7 @@ local function sequencer_Drag(mouse, keys, button_left, button_top, button_right
                         end
                     end
                 end
-            end
+           end
   
             -- Process right-click events
             if mouse.isMouseDownR and intersectL then
@@ -4070,7 +4075,7 @@ local function sequencer_Drag(mouse, keys, button_left, button_top, button_right
                 processedButtons[buttonId] = nil -- Reset button state on right-click
             end
         end
-    end
+    end 
 
 
     -- if keys.altDown then
@@ -4134,10 +4139,6 @@ local function sequencer_Drag(mouse, keys, button_left, button_top, button_right
         active_lane = nil
         processedButtons = {} -- Reset the processed buttons on mouse release
     end
-
-    
-
-    
 end
 
 
