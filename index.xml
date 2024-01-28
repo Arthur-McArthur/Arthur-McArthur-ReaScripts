@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="Arthur McArthur ReaScripts" commit="c4a77e39dff9913e90c19731c7459e2bc9e0d7aa">
+<index version="1" name="Arthur McArthur ReaScripts" commit="38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf">
   <category name="McSequencer">
     <reapack name="ArthurMcArthur_McSequencer.lua" type="script" desc="Arthur McArthur McSequencer">
       <version name="1.1" author="Arthur McArthur" time="2024-01-22T07:03:25Z">
@@ -1058,6 +1058,88 @@ Fix window opening too small on startup]]></changelog>
         <source file="Fonts/Segoe UI.ttf">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/c4a77e39dff9913e90c19731c7459e2bc9e0d7aa/McSequencer/Fonts/Segoe%20UI.ttf</source>
         <source type="effect" file="JSFX/MIDI Note Sender.jsfx">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/c4a77e39dff9913e90c19731c7459e2bc9e0d7aa/McSequencer/JSFX/MIDI%20Note%20Sender.jsfx</source>
         <source type="effect" file="JSFX/swing.jsfx">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/c4a77e39dff9913e90c19731c7459e2bc9e0d7aa/McSequencer/JSFX/swing.jsfx</source>
+      </version>
+      <version name="1.1.15" author="Arthur McArthur" time="2024-01-28T13:50:15Z">
+        <changelog><![CDATA[Fixed font inclusion
+Disable pattern length limit
+Fix duplicate actions
+Display version number in window
+Fix New Pattern bugs
+Fix window opening too small on startup]]></changelog>
+        <source main="main">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/ArthurMcArthur_McSequencer.lua</source>
+        <source file="Modules/Object Params.lua">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Modules/Object%20Params.lua</source>
+        <source file="Modules/Theme Editor.lua">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Modules/Theme%20Editor.lua</source>
+        <source file="Modules/serpent.lua">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Modules/serpent.lua</source>
+        <source file="Images/Blank_Sample.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Blank_Sample.png</source>
+        <source file="Images/Blank_Sample_on.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Blank_Sample_on.png</source>
+        <source file="Images/Channel_button_off.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Channel_button_off.png</source>
+        <source file="Images/Channel_button_on.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Channel_button_on.png</source>
+        <source file="Images/Float_RS5K.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Float_RS5K.png</source>
+        <source file="Images/Float_RS5K_on.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Float_RS5K_on.png</source>
+        <source file="Images/Knob_2.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Knob_2.png</source>
+        <source file="Images/Knob_Pan.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Knob_Pan.png</source>
+        <source file="Images/Knob_Teal.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Knob_Teal.png</source>
+        <source file="Images/Knob_Yellow.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Knob_Yellow.png</source>
+        <source file="Images/Knob_vol.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Knob_vol.png</source>
+        <source file="Images/Minus1.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Minus1.png</source>
+        <source file="Images/Minus12.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Minus12.png</source>
+        <source file="Images/Minus12_on.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Minus12_on.png</source>
+        <source file="Images/Minus1_on.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Minus1_on.png</source>
+        <source file="Images/Mute_off.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Mute_off.png</source>
+        <source file="Images/Mute_off@2x.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Mute_off@2x.png</source>
+        <source file="Images/Mute_off@4x.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Mute_off@4x.png</source>
+        <source file="Images/Mute_on.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Mute_on.png</source>
+        <source file="Images/Next_Sample.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Next_Sample.png</source>
+        <source file="Images/Next_Sample_on.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Next_Sample_on.png</source>
+        <source file="Images/Note_off.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Note_off.png</source>
+        <source file="Images/Pattern_Add.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Pattern_Add.png</source>
+        <source file="Images/Pattern_Length.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Pattern_Length.png</source>
+        <source file="Images/Pattern_Selector.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Pattern_Selector.png</source>
+        <source file="Images/Pick_Sample.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Pick_Sample.png</source>
+        <source file="Images/Pick_Sample_on.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Pick_Sample_on.png</source>
+        <source file="Images/PlayCursor_hovered.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/PlayCursor_hovered.png</source>
+        <source file="Images/PlayCursor_off.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/PlayCursor_off.png</source>
+        <source file="Images/PlayCursor_on.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/PlayCursor_on.png</source>
+        <source file="Images/Plus1.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Plus1.png</source>
+        <source file="Images/Plus12.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Plus12.png</source>
+        <source file="Images/Plus12_on.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Plus12_on.png</source>
+        <source file="Images/Plus1_on.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Plus1_on.png</source>
+        <source file="Images/Prev_Sample.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Prev_Sample.png</source>
+        <source file="Images/Prev_Sample_2.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Prev_Sample_2.png</source>
+        <source file="Images/Prev_Sample_on.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Prev_Sample_on.png</source>
+        <source file="Images/Prev_Sample_on_2.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Prev_Sample_on_2.png</source>
+        <source file="Images/Rnd_Sample.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Rnd_Sample.png</source>
+        <source file="Images/Rnd_Sample_2.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Rnd_Sample_2.png</source>
+        <source file="Images/Rnd_Sample_Sidebar.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Rnd_Sample_Sidebar.png</source>
+        <source file="Images/Rnd_Sample_Sidebar_on.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Rnd_Sample_Sidebar_on.png</source>
+        <source file="Images/Rnd_Sample_on.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Rnd_Sample_on.png</source>
+        <source file="Images/Selector_off.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Selector_off.png</source>
+        <source file="Images/Selector_off_2.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Selector_off_2.png</source>
+        <source file="Images/Selector_on.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Selector_on.png</source>
+        <source file="Images/Sidebar_bg - Copy.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Sidebar_bg%20-%20Copy.png</source>
+        <source file="Images/Sidebar_bg.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Sidebar_bg.png</source>
+        <source file="Images/Slider_1.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Slider_1.png</source>
+        <source file="Images/Slider_2.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Slider_2.png</source>
+        <source file="Images/Slider_Pitch.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Slider_Pitch.png</source>
+        <source file="Images/Solo_off.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Solo_off.png</source>
+        <source file="Images/Solo_on.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Solo_on.png</source>
+        <source file="Images/Step_even_off.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Step_even_off.png</source>
+        <source file="Images/Step_even_off_2.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Step_even_off_2.png</source>
+        <source file="Images/Step_even_on.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Step_even_on.png</source>
+        <source file="Images/Step_even_on_2.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Step_even_on_2.png</source>
+        <source file="Images/Step_odd_off.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Step_odd_off.png</source>
+        <source file="Images/Step_odd_off_2.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Step_odd_off_2.png</source>
+        <source file="Images/Step_odd_on.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Step_odd_on.png</source>
+        <source file="Images/Step_odd_on_2.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/Step_odd_on_2.png</source>
+        <source file="Images/slice1.png">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Images/slice1.png</source>
+        <source file="JSFX/MIDI Note Sender.jsfx">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/JSFX/MIDI%20Note%20Sender.jsfx</source>
+        <source file="JSFX/swing.jsfx">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/JSFX/swing.jsfx</source>
+        <source file="Themes/theme_1.txt">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Themes/theme_1.txt</source>
+        <source file="Themes/theme_2.txt">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Themes/theme_2.txt</source>
+        <source file="Themes/theme_3.txt">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Themes/theme_3.txt</source>
+        <source file="Fonts/Inter.ttc">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/Fonts/Inter.ttc</source>
+        <source type="effect" file="JSFX/MIDI Note Sender.jsfx">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/JSFX/MIDI%20Note%20Sender.jsfx</source>
+        <source type="effect" file="JSFX/swing.jsfx">https://github.com/Arthur-McArthur/Arthur-McArthur-ReaScripts/raw/38d9ddbbae1084bf45f11f561d0c4ebca76ea1bf/McSequencer/JSFX/swing.jsfx</source>
       </version>
     </reapack>
   </category>
