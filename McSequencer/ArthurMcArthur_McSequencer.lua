@@ -527,16 +527,6 @@ local function goToLoopStart()
     reaper.PreventUIRefresh(-1)
 end
 
-
--- local function isAnyMenuOpen(menu_open)
---     for _, isOpen in pairs(menu_open) do
---         if isOpen then
---             return true
---         end
---     end
---     return false
--- end
-
 local function isAnyMenuOpen(menu_open)
     local numMenus = #menu_open
     for i = 1, numMenus do
