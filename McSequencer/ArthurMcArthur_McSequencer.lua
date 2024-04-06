@@ -17,7 +17,7 @@
 local versionNumber = '1.1.2'
 local reaper = reaper
 local os = reaper.GetOS()
-
+ 
 local function checkDependencies()
     local missingDeps = {}
 
