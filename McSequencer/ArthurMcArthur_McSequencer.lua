@@ -3484,7 +3484,7 @@ local function obj_New_Pattern(ctx, patternItems, colorValues, maxPatternNumber,
             end
             newPatternItem(maxPatternNumber)
             update_required = true
-            -- patternSelectSlider = patternSelectSlider + 1
+            
             local patternItems, patternTrackIndex, patternTrack = getPatternItems(track_count)
             pasteChannelDataToSelectedTracks(patternItems, patternSelectSlider)
             reaper.PreventUIRefresh(-1)
