@@ -5,6 +5,7 @@
 -- @changelog
 --  New dropdown control and slider implementation
 --  Added note pitch and start offset sliders
+--  Alt-dragging on sliders now resets the value to default
 --  Bug fixes
 -- @provides
 --   Modules/*.lua
@@ -114,13 +115,7 @@ local params = dofile(script_path .. 'Modules/Object Params.lua')
 local colors = themeEditor(script_path, modules_path, themes_path)
 local serpent = require("serpent")
 
----------------------------------------------------------------------
--- the main fuzzy comparison function -- use this
----------------------------------------------------------------------
 
-
-
-local reset = {}
 local size_modifier = 1
 -- local obj_x, obj_y = 20 * size_modifier, 34 * size_modifier
 local lengthSlider = 16
@@ -149,19 +144,15 @@ local controlSidebarWidth = 220
 local time_resolution = 4
 local update_required = true
 local top_row_x = 34
-local findTempoMarker = false
-local value
 local valuePitch
 local sliderTriggered = false
 local triggerTime = 0
 local triggerDuration = 0.1 -- duration in seconds for which the slider stays on
 local originalSizeModifier, originalObjX, originalObjY
-local patternItemsCache = patternItemsCache or {}
 local showPopup = false
 local copiedValue
 local numberOfSliders = 64 -- Define how many sliders you want
 local sliderWidth = 20
-local sliderHeight = 269
 local x_padding = 2
 local right_drag_start_x = nil
 local right_drag_start_y = nil
@@ -2354,8 +2345,15 @@ local function obj_OffsetSliders(ctx, trackIndex, note_positions, note_pitches,
                         valueToApply = math.max(0, math.min(valueToApply, 1))
                     end
 
+                    if keys.altDown then
+                        valueToApply = 0.5
+                        updateMidiNoteOffset(i + 1, valueToApply, midi_item, midi_take, num_events, pattern_start,
+                            step_duration, tolerance, noteData)
+                    else
+
                     updateMidiNoteOffset(i + 1, valueToApply, midi_item, midi_take, num_events, pattern_start,
                         step_duration, tolerance, noteData)
+                    end
                 end
             end
         else 
@@ -2568,7 +2566,13 @@ local function obj_PitchSliders(ctx, trackIndex, note_positions, note_pitches,
                     valueToApply = (valueToApply * (84 - 36)) + 36
 
                     local new_pitch = math.max(1, math.min(math.floor(valueToApply), 127))
-                    updateMidiNotePitch(i + 1, new_pitch, midi_item, midi_take, num_events, pattern_start, step_duration, tolerance, noteData)
+                    if keys.altDown then
+                        new_pitch = 60
+                        updateMidiNotePitch(i + 1, new_pitch, midi_item, midi_take, num_events, pattern_start, step_duration, tolerance, noteData)
+
+                    else
+                        updateMidiNotePitch(i + 1, new_pitch, midi_item, midi_take, num_events, pattern_start, step_duration, tolerance, noteData)
+                    end
                 end
                 
             end
@@ -2782,7 +2786,14 @@ local function obj_VelocitySliders(ctx, trackIndex, note_positions, note_velocit
                     valueToApply = math.max(0, math.min(valueToApply, 1)) -- Clamp the value
     
                     local new_velocity = math.max(1, math.floor(valueToApply * 127))
+
+                    if keys.altDown then
+                        new_velocity = 100
+                        updateMidiNoteVelocity(i + 1, new_velocity, midi_item, midi_take, num_events, pattern_start, step_duration, tolerance, noteData)
+                    else
+
                     updateMidiNoteVelocity(i + 1, new_velocity, midi_item, midi_take, num_events, pattern_start, step_duration, tolerance, noteData)
+                    end
                 end
             end
         else
@@ -2827,9 +2838,15 @@ local function obj_VelocitySliders(ctx, trackIndex, note_positions, note_velocit
                         slider.value = math.max(0, math.min(curveValue, 1))
                         -- Update MIDI note velocity based on the slider's new value
                         local new_velocity = math.max(1, math.floor(slider.value * 127))
-                        local step_num = i + 1
+
+                        if keys.altDown then
+                            new_velocity = 100
+                            updateMidiNoteVelocity(i + 1, new_velocity, midi_item, midi_take, num_events, pattern_start, step_duration, tolerance, noteData)
+                        else
+
                         updateMidiNoteVelocity(i + 1, new_velocity, midi_item,
                             midi_take, num_events, pattern_start, step_duration, tolerance, noteData)
+                        end
                     end
                 end
             end
