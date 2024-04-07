@@ -5776,7 +5776,7 @@ function loop()
 
                             if channel.GUID.expand.open[i] == 1 then
                                 if not channel.GUID.expand.spacing[i] then
-                                    channel.GUID.expand.spacing[i] = 120
+                                    channel.GUID.expand.spacing[i] = 200
                                 end
 
                                 if midi_item then
