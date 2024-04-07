@@ -1,7 +1,7 @@
 -- @description Arthur McArthur McSequencer
 -- @author Arthur McArthur
 -- @license GPL v3
--- @version 1.1.2
+-- @version 1.1.20
 -- @changelog
 --  New dropdown control and slider implementation
 --  Added note pitch and start offset sliders
@@ -5821,9 +5821,11 @@ function loop()
                                         x_padding, patternItems, patternSelectSlider, colorValues)
                                     end
                                     
-                                    adjustCursorPos(ctx, 0, -15)
+                                    adjustCursorPos(ctx, 22, -28)
                                     channel.GUID.expand.spacing[i] = obj_ExpandResize(ctx, channel.GUID.expand.spacing[i], i, mouse, keys, x)
                                     reaper.ImGui_Dummy(ctx, 1, 1)
+                                    
+
                                 end
                             end
 
