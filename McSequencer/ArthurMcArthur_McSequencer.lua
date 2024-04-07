@@ -31,7 +31,7 @@ local function checkDependencies()
         missingDeps[#missingDeps + 1] = 'SWS extension, found at https://www.sws-extension.org/'
     end
 
-    if not  reaper.JS_ReaScriptAPI_Version() then
+    if not reaper.JS_ReaScriptAPI_Version() then
         missingDeps[#missingDeps + 1] = 'JS_ReaScriptAPI extension (found in ReaPack)'
     end
 
