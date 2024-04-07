@@ -15,7 +15,7 @@
 --   Fonts/*.ttc
 --   [effect] JSFX/*.jsfx
 
-local versionNumber = '1.1.2'
+local versionNumber = '1.1.20'
 local reaper = reaper
 local os = reaper.GetOS()
  
