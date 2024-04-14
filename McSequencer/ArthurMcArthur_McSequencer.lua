@@ -1,9 +1,13 @@
 -- @description Arthur McArthur McSequencer
 -- @author Arthur McArthur
 -- @license GPL v3
--- @version 1.1.21
+-- @version 1.1.22
 -- @changelog
---  Better dependency checks (thanks Daniel Lumertz and BirdBird)
+--  Sounds can now be dragged and dropped in between sequencer rows (thanks cfillon!)
+--  Channel buttons will now be highlighed when sounds are dragged over them
+--  Playcursor buttons will stay at the top of the window when vertically scrolling through the sequencer rows
+--  Potential fix for pitch slider value misalignement
+--  Some scrolling fixes
 -- @provides
 --   Modules/*.lua
 --   Images/*.png
@@ -12,7 +16,7 @@
 --   Fonts/*.ttc
 --   [effect] JSFX/*.jsfx
 
-local versionNumber = '1.1.21'
+local versionNumber = '1.1.22'
 local reaper = reaper
 local os = reaper.GetOS()
 
@@ -265,7 +269,7 @@ local valuePitch
 local sliderTriggered = false
 local triggerTime = 0
 local triggerDuration = 0.1 -- duration in seconds for which the slider stays on
-local originalSizeModifier, originalObjX, originalObjY
+-- local originalSizeModifier, originalObjX, originalObjY
 local showPopup = false
 local copiedValue
 local numberOfSliders = 64 -- Define how many sliders you want
@@ -278,7 +282,7 @@ local fontSize = 12
 local fontSidebarButtonsSize = 11
 local slider = {}
 local dragStartPos = {}
-local sequencerFlags
+-- local sequencerFlags
 local isClicked = {}
 local btnimg = {}
 local isHovered = { PlayCursor = {}}
@@ -329,8 +333,6 @@ local channel = {
         },
     },
 }
-
--- local expandSpacing = 60
 
 local parent = {
     channel_amount = {},
@@ -870,6 +872,8 @@ local function obj_Knob2(ctx, imageParams, id, value, params, mouse, keys, yOffs
     end
     return rv, value
 end
+
+
 
 
 ---- TRACK RELATED  ---------------------------------
@@ -2372,6 +2376,421 @@ local function updateMidiNoteOffset(step_num, slider_value, midi_item, midi_take
     end
 end
 
+local function obj_VelocitySliders(ctx, trackIndex, note_positions, note_velocities,
+                                   mouse, keys, numberOfSliders, sliderWidth, sliderHeight, x_padding, patternItems,
+                                   patternSelectSlider, colorValues)
+    local pattern_item, pattern_start, pattern_end, midi_item = getSelectedPatternItemAndMidiItem(trackIndex,
+        patternItems, patternSelectSlider)
+    if not midi_item then
+        return false
+    end
+    local midi_take = reaper.GetMediaItemTake(midi_item, 0)
+    local num_events, _, _, _ = reaper.MIDI_CountEvts(midi_take)
+    local noteData = {}
+    for i = 0, num_events - 1 do
+        local _, _, _, start_ppq, _, _, _, _ = reaper.MIDI_GetNote(midi_take, i)
+        local note_start_time = reaper.MIDI_GetProjTimeFromPPQPos(midi_take, start_ppq)
+        noteData[i] = { start_ppq = start_ppq, note_start_time = note_start_time }
+    end
+
+    local step_duration = reaper.TimeMap2_beatsToTime(0, 1) / time_resolution
+    local tolerance = step_duration / 2
+    local cursor_x, cursor_y = reaper.ImGui_GetCursorScreenPos(ctx)
+    local cursor_x = cursor_x + 245 * size_modifier
+    local x_padding = x_padding * size_modifier
+    local sliderWidth = sliderWidth * size_modifier
+    local sliderHeight = sliderHeight * size_modifier
+    local color1 = colorValues.color24_slider2
+    local color2 = colorValues.color25_slider3
+    local dragStartedOnAnySlider = false
+
+    if anyMenuOpen == false then
+        if (mouse.isMouseDownL or mouse.isMouseDownR) and anyMenuOpen == false then
+            for i = 0, lengthSlider - 1 do
+                local sliderLeftX = cursor_x + (i * sliderWidth)
+                local sliderRightX = sliderLeftX + sliderWidth
+                local sliderTopY = cursor_y
+                local sliderBottomY = cursor_y + sliderHeight
+
+                if drag_start_x >= sliderLeftX and drag_start_x <= sliderRightX
+                    and drag_start_y >= sliderTopY and drag_start_y <= sliderBottomY then
+                    dragStartedOnAnySlider = true
+                    break
+                end
+            end
+        end
+
+        -- Left-click drag handling
+        if (mouse.isMouseDownL and dragStartedOnAnySlider) and anyMenuOpen == false then
+            draggingNow = true
+            -- Calculate the current and previous slider indices based on mouse position
+            local currentSliderIndex = math.floor((mouse.mouse_x - cursor_x) / sliderWidth)
+            local previousSliderIndex = math.floor((previous_mouse_x - cursor_x) / sliderWidth)
+            currentSliderIndex = math.max(0, math.min(currentSliderIndex, numberOfSliders - 1))
+            previousSliderIndex = math.max(0, math.min(previousSliderIndex, numberOfSliders - 1))
+
+            -- Determine the range of sliders to update
+            local startIndex = math.min(currentSliderIndex, previousSliderIndex)
+            local endIndex = math.max(currentSliderIndex, previousSliderIndex)
+
+            -- Update sliders in the determined range
+            for i = startIndex, endIndex do
+                local step_time = pattern_start + i * step_duration
+                local closestNoteIndex = nil
+                local closestNoteDistance = tolerance
+
+                -- Find the closest note to this step time
+                for j = 0, num_events - 1 do
+                    local _, _, _, start_ppq, _, _, _, _ = reaper.MIDI_GetNote(midi_take, j)
+                    local note_start_time = reaper.MIDI_GetProjTimeFromPPQPos(midi_take, start_ppq)
+                    local distance = math.abs(note_start_time - step_time)
+                    if distance < closestNoteDistance then
+                        closestNoteIndex = j
+                        closestNoteDistance = distance
+                    end
+                end
+
+
+                -- print('st ' .. startIndex)
+                -- print('en ' .. endIndex)
+                if closestNoteIndex then
+                    local valueToApply
+                    if startIndex ~= endIndex then
+                        local relativePosition = (i - startIndex) / (endIndex - startIndex)
+                        local interpolated_y = previous_mouse_y + (mouse.mouse_y - previous_mouse_y) * relativePosition
+                        valueToApply = 1 - (interpolated_y - cursor_y) / sliderHeight
+                    else
+                        valueToApply = 1 - (mouse.mouse_y - cursor_y) / sliderHeight
+                    end
+                    valueToApply = math.max(0, math.min(valueToApply, 1)) -- Clamp the value
+
+                    local new_velocity = math.max(1, math.floor(valueToApply * 127))
+
+                    if keys.altDown then
+                        new_velocity = 100
+                        updateMidiNoteVelocity(i + 1, new_velocity, midi_item, midi_take, num_events, pattern_start,
+                            step_duration, tolerance, noteData)
+                    else
+                        updateMidiNoteVelocity(i + 1, new_velocity, midi_item, midi_take, num_events, pattern_start,
+                            step_duration, tolerance, noteData)
+                    end
+                end
+            end
+        else
+            draggingNow = false
+        end
+
+        -- Right-click drag handling
+        if mouse.isMouseDownR and dragStartedOnAnySlider and anyMenuOpen == false then
+            draggingNow = true
+            if not right_drag_start_x then
+                right_drag_start_x = mouse.mouse_x
+                right_drag_start_y = mouse.mouse_y
+                right_drag_velocity = true
+                for i = 0, numberOfSliders - 1 do
+                    local slider = slider[i + 1]
+                    slider.startValue = slider.value
+                    slider.startPos = cursor_x + (i * sliderWidth)
+                end
+            else
+                local tension = OnMouseWheel(mouse.mousewheel_v)
+                local drag_start_index = math.floor((right_drag_start_x - cursor_x) / sliderWidth)
+                local drag_end_index = math.floor((mouse.mouse_x - cursor_x) / sliderWidth)
+                local drag_min_index = math.min(drag_start_index, drag_end_index)
+                local drag_max_index = math.max(drag_start_index, drag_end_index)
+                local startYValue = 1 - (right_drag_start_y - cursor_y) / sliderHeight
+                local currentYValue = 1 - (mouse.mouse_y - cursor_y) / sliderHeight
+
+                for i = drag_min_index, drag_max_index do
+                    local slider = slider[i + 1]
+                    if slider then
+                        local relativePos
+                        if drag_start_index == drag_end_index then
+                            -- If dragging started and ended on the same slider
+                            relativePos = (mouse.mouse_x - right_drag_start_x) / sliderWidth
+                        else
+                            -- Normal calculation for relative position
+                            relativePos = (slider.startPos - right_drag_start_x) / (mouse.mouse_x - right_drag_start_x)
+                        end
+                        relativePos = math.max(0, math.min(relativePos, 1)) -- Clamp the value
+
+                        local curveValue = applyCurveToValue(startYValue, currentYValue, relativePos, 1, tension)
+                        slider.value = math.max(0, math.min(curveValue, 1))
+                        -- Update MIDI note velocity based on the slider's new value
+                        local new_velocity = math.max(1, math.floor(slider.value * 127))
+
+                        if keys.altDown then
+                            new_velocity = 100
+                            updateMidiNoteVelocity(i + 1, new_velocity, midi_item, midi_take, num_events, pattern_start,
+                                step_duration, tolerance, noteData)
+                        else
+                            updateMidiNoteVelocity(i + 1, new_velocity, midi_item,
+                                midi_take, num_events, pattern_start, step_duration, tolerance, noteData)
+                        end
+                    end
+                end
+            end
+        end
+    else
+        draggingNow = false
+    end
+
+    -- Sliders
+    for i = 0, lengthSlider - 1 do
+        local step_time = pattern_start + i * step_duration
+        local slider_cursor_x = cursor_x + (i * sliderWidth)
+        local slider_value = nil -- Default to no value
+        local isNotePresent = false
+        -- Check for the presence of a note at this step and set slider_value if found
+        local numNotePositions = #note_positions
+        for idx = 1, numNotePositions do
+            local note_pos = note_positions[idx]
+            if math.abs(note_pos - step_time) <= tolerance then
+                slider_value = note_velocities[idx] / 127
+                isNotePresent = true
+                break
+            end
+        end
+
+        -- Display the slider
+        local color = (math.floor(i / 4) % 2 == 0) and color1 or color2
+        local numColorsPushed, rv, slider_left, slider_top, slider_right, slider_bottom = obj_RectSlider(
+            ctx, slider_cursor_x, cursor_y, sliderWidth, sliderHeight, slider_value, drawList, x_padding, color,
+            isNotePresent, colorValues)
+    end
+
+    --Dummy Spacer
+    reaper.ImGui_Dummy(ctx, 0, sliderHeight)
+
+    -- Reset states on mouse release
+    if mouse.mouseReleasedR then
+        right_drag_start_x, right_drag_start_y = nil, nil
+    end
+
+    -- Update the previous mouse position for interpolation
+    previous_mouse_x, previous_mouse_y = mouse.mouse_x, mouse.mouse_y
+end
+
+local function obj_PitchSliders(ctx, trackIndex, note_positions, note_pitches,
+                                mouse, keys, numberOfSliders, sliderWidth, sliderHeight, x_padding, patternItems,
+                                patternSelectSlider, colorValues)
+    local pattern_item, pattern_start, pattern_end, midi_item = getSelectedPatternItemAndMidiItem(trackIndex,
+        patternItems, patternSelectSlider)
+    if not midi_item then
+        return false
+    end
+    local midi_take = reaper.GetMediaItemTake(midi_item, 0)
+    local num_events, _, _, _ = reaper.MIDI_CountEvts(midi_take)
+    local noteData = {}
+    for i = 0, num_events - 1 do
+        local _, _, _, start_ppq, _, _, _, _ = reaper.MIDI_GetNote(midi_take, i)
+        local note_start_time = reaper.MIDI_GetProjTimeFromPPQPos(midi_take, start_ppq)
+        noteData[i] = { start_ppq = start_ppq, note_start_time = note_start_time }
+    end
+
+    local step_duration = reaper.TimeMap2_beatsToTime(0, 1) / time_resolution
+    local tolerance = step_duration / 2
+    local cursor_x, cursor_y = reaper.ImGui_GetCursorScreenPos(ctx)
+    local cursor_x = cursor_x + 245 * size_modifier
+    local x_padding = x_padding * size_modifier
+    local sliderWidth = sliderWidth * size_modifier
+    local sliderHeight = sliderHeight * size_modifier
+    local color1 = colorValues.color24_slider2
+    local color2 = colorValues.color25_slider3
+    local dragStartedOnAnySlider = false
+
+    if anyMenuOpen == false then
+        if (mouse.isMouseDownL or mouse.isMouseDownR) and anyMenuOpen == false then
+            for i = 0, lengthSlider - 1 do
+                local sliderLeftX = cursor_x + (i * sliderWidth)
+                local sliderRightX = sliderLeftX + sliderWidth
+                local sliderTopY = cursor_y
+                local sliderBottomY = cursor_y + sliderHeight
+
+                if drag_start_x >= sliderLeftX and drag_start_x <= sliderRightX
+                    and drag_start_y >= sliderTopY and drag_start_y <= sliderBottomY then
+                    dragStartedOnAnySlider = true
+                    break
+                end
+            end
+        end
+
+        -- Left-click drag handling
+        if (mouse.isMouseDownL and dragStartedOnAnySlider) and anyMenuOpen == false then
+            draggingNow = true
+            -- Calculate the current and previous slider indices based on mouse position
+            local currentSliderIndex = math.floor((mouse.mouse_x - cursor_x) / sliderWidth)
+            local previousSliderIndex = math.floor((previous_mouse_x - cursor_x) / sliderWidth)
+            currentSliderIndex = math.max(0, math.min(currentSliderIndex, numberOfSliders - 1))
+            previousSliderIndex = math.max(0, math.min(previousSliderIndex, numberOfSliders - 1))
+
+            -- Determine the range of sliders to update
+            local startIndex = math.min(currentSliderIndex, previousSliderIndex)
+            local endIndex = math.max(currentSliderIndex, previousSliderIndex)
+
+            -- Update sliders in the determined range
+            for i = startIndex, endIndex do
+                local step_time = pattern_start + i * step_duration
+                local closestNoteIndex = nil
+                local closestNoteDistance = tolerance
+
+                -- Find the closest note to this step time
+                for j = 0, num_events - 1 do
+                    local _, _, _, start_ppq, _, _, _, _ = reaper.MIDI_GetNote(midi_take, j)
+                    local note_start_time = reaper.MIDI_GetProjTimeFromPPQPos(midi_take, start_ppq)
+                    local distance = math.abs(note_start_time - step_time)
+                    if distance < closestNoteDistance then
+                        closestNoteIndex = j
+                        closestNoteDistance = distance
+                    end
+                end
+                -- print('st ' .. startIndex)
+                -- print('en ' .. endIndex)
+                if closestNoteIndex then
+                    local valueToApply
+                    if startIndex ~= endIndex then
+                        local relativePosition = (i - startIndex) / (endIndex - startIndex)
+                        local interpolated_y = previous_mouse_y + (mouse.mouse_y - previous_mouse_y) * relativePosition
+                        valueToApply = 1 - (interpolated_y - cursor_y) / sliderHeight
+                    else
+                        valueToApply = 1 - (mouse.mouse_y - cursor_y) / sliderHeight
+                    end
+                    -- Clamp the value between 0 and 1
+                    valueToApply = math.max(0, math.min(valueToApply, 1))
+
+                    -- Scale from 0 to 1 range to 36 to 84 range
+                    valueToApply = (valueToApply * (84 - 36)) + 36
+
+                    local new_pitch = math.max(1, math.min(math.floor(valueToApply), 127))
+                    if keys.altDown then
+                        new_pitch = 60
+                        updateMidiNotePitch(i + 1, new_pitch, midi_item, midi_take, num_events, pattern_start,
+                            step_duration, tolerance, noteData)
+                    else
+                        updateMidiNotePitch(i + 1, new_pitch, midi_item, midi_take, num_events, pattern_start,
+                            step_duration, tolerance, noteData)
+                    end
+                end
+            end
+        else
+            draggingNow = false
+        end
+
+        -- Right-click drag handling
+        if mouse.isMouseDownR and dragStartedOnAnySlider and anyMenuOpen == false then
+            draggingNow = true
+            if not right_drag_start_x then
+                right_drag_start_x = mouse.mouse_x
+                right_drag_start_y = mouse.mouse_y
+                right_drag_velocity = true
+                for i = 0, numberOfSliders - 1 do
+                    local slider = slider[i + 1]
+                    slider.startValue = slider.value
+                    slider.startPos = cursor_x + (i * sliderWidth)
+                end
+            else
+                local tension = OnMouseWheel(mouse.mousewheel_v)
+                local drag_start_index = math.floor((right_drag_start_x - cursor_x) / sliderWidth)
+                local drag_end_index = math.floor((mouse.mouse_x - cursor_x) / sliderWidth)
+                local drag_min_index = math.min(drag_start_index, drag_end_index)
+                local drag_max_index = math.max(drag_start_index, drag_end_index)
+                local startYValue = 1 - (right_drag_start_y - cursor_y) / sliderHeight
+                local currentYValue = 1 - (mouse.mouse_y - cursor_y) / sliderHeight
+
+                for i = drag_min_index, drag_max_index do
+                    local step_time = pattern_start + i * step_duration
+                    local closestNoteIndex = nil
+                    local closestNoteDistance = tolerance
+
+                    -- Find the closest note to this step time
+                    for j = 0, num_events - 1 do
+                        local _, _, _, start_ppq, _, _, _, _ = reaper.MIDI_GetNote(midi_take, j)
+                        local note_start_time = reaper.MIDI_GetProjTimeFromPPQPos(midi_take, start_ppq)
+                        local distance = math.abs(note_start_time - step_time)
+                        if distance < closestNoteDistance then
+                            closestNoteIndex = j
+                            closestNoteDistance = distance
+                        end
+                    end
+
+                    if closestNoteIndex then
+                        local slider = slider[i + 1]
+                        if slider then
+                            local relativePos
+                            if drag_start_index == drag_end_index then
+                                -- If dragging started and ended on the same slider
+                                relativePos = (mouse.mouse_x - right_drag_start_x) / sliderWidth
+                            else
+                                -- Normal calculation for relative position
+                                relativePos = (slider.startPos - right_drag_start_x) /
+                                (mouse.mouse_x - right_drag_start_x)
+                            end
+                            relativePos = math.max(0, math.min(relativePos, 1)) -- Clamp the value
+
+                            local curveValue = applyCurveToValue(startYValue, currentYValue, relativePos, 1, tension)
+                            slider.value = math.max(0, math.min(curveValue, 1))
+
+                            -- Scale from 0 to 1 range to 36 to 84 range
+                            local new_pitch = (slider.value * (84 - 36)) + 36
+                            new_pitch = math.max(1, math.min(math.floor(new_pitch), 127))
+
+                            updateMidiNotePitch(i + 1, new_pitch, midi_item, midi_take, num_events, pattern_start,
+                                step_duration, tolerance, noteData)
+                        end
+                    end
+                end
+            end
+        end
+    else
+        draggingNow = false
+    end
+
+    -- Sliders
+    for i = 0, lengthSlider - 1 do
+        local step_time = pattern_start + i * step_duration
+        local slider_cursor_x = cursor_x + (i * sliderWidth)
+        local slider_value = 0.5 -- Default to middle value (60)
+        local note_value
+        local isNotePresent = false
+        -- Check for the presence of a note at this step and set slider_value if found
+        local numNotePositions = #note_positions
+        for idx = 1, numNotePositions do
+            local note_pos = note_positions[idx]
+            if math.abs(note_pos - step_time) <= tolerance then
+                slider_value = (note_pitches[idx] - 36) / 48 -- Scale from 0 to 1
+                note_value = translateNoteNumber(note_pitches[idx])
+                isNotePresent = true
+                break
+            end
+        end
+
+        -- Display the slider
+        local color = (math.floor(i / 4) % 2 == 0) and color1 or color2
+
+
+        local numColorsPushed, rv, slider_left, slider_top, slider_right, slider_bottom = obj_RectSliderMiddle(
+            ctx, slider_cursor_x, cursor_y, sliderWidth, sliderHeight, slider_value, drawList, x_padding, color,
+            isNotePresent, colorValues)
+
+
+        reaper.ImGui_PushFont(ctx, font_SliderValue)
+        reaper.ImGui_DrawList_AddText(drawList, slider_left + x_padding, slider_bottom + 6, colorValues.color66_waveform,
+            note_value)
+        reaper.ImGui_PopFont(ctx)
+    end
+
+    --Dummy Spacer
+    reaper.ImGui_Dummy(ctx, 0, sliderHeight)
+
+    -- Reset states on mouse release
+    if mouse.mouseReleasedR then
+        right_drag_start_x, right_drag_start_y = nil, nil
+    end
+
+    -- Update the previous mouse position for interpolation
+    previous_mouse_x, previous_mouse_y = mouse.mouse_x, mouse.mouse_y
+end
+
 local function obj_OffsetSliders(ctx, trackIndex, note_positions, note_pitches,
                                  mouse, keys, numberOfSliders, sliderWidth, sliderHeight, x_padding, patternItems,
                                  patternSelectSlider, colorValues)
@@ -2461,7 +2880,7 @@ local function obj_OffsetSliders(ctx, trackIndex, note_positions, note_pitches,
                     if i == 0 then
                         valueToApply = math.max(0.5, math.min(valueToApply, 1))
                     else
-                        valueToApply = math.max(0, math.min(valueToApply, 1))
+                        valueToApply = math.max(0.02, math.min(valueToApply, 1))
                     end
 
                     if keys.altDown then
@@ -2592,423 +3011,159 @@ local function obj_OffsetSliders(ctx, trackIndex, note_positions, note_pitches,
 end
 
 
-local function obj_PitchSliders(ctx, trackIndex, note_positions, note_pitches,
-                                   mouse, keys, numberOfSliders, sliderWidth, sliderHeight, x_padding, patternItems,
-                                   patternSelectSlider, colorValues)
 
-    local pattern_item, pattern_start, pattern_end, midi_item = getSelectedPatternItemAndMidiItem(trackIndex,
-        patternItems, patternSelectSlider)
-    if not midi_item then
-        return false
+
+
+---- MIDI KNOBS---------------------------------
+
+local function obj_KnobMIDI(ctx, imageParams, id, value, params, mouse, keys, yOffset)
+    reaper.ImGui_InvisibleButton(ctx, id, params.frameWidth, params.frameHeight)
+    reaper.ImGui_SameLine(ctx)
+    if not yOffset then yOffset = 0 end
+    adjustCursorPos(ctx, -params.frameWidth - 7, 3 - yOffset)
+
+    local isActive = reaper.ImGui_IsItemActive(ctx)
+    local rv = false
+
+    -- Define the actual sensitivity based on key modifiers
+    local dragSensitivity = keys.ctrlShiftDown and params.dragFineSensitivity * 0.25 or
+        (keys.ctrlDown and params.dragFineSensitivity * 0.5 or (keys.shiftDown and params.dragFineSensitivity or params.dragSensitivity))
+    local wheelSensitivity = keys.ctrlShiftDown and params.wheelFineSensitivity * 0.25 or
+        (keys.ctrlDown and params.wheelFineSensitivity * 0.5 or (keys.shiftDown and params.wheelFineSensitivity or params.wheelSensitivity))
+    local overallSensitivity = 250
+
+    -- Transform the value to a curved scale
+    if not value then 
+        update_requiered = true 
+        return 
     end
-    local midi_take = reaper.GetMediaItemTake(midi_item, 0)
-    local num_events, _, _, _ = reaper.MIDI_CountEvts(midi_take)
-    local noteData = {}
-    for i = 0, num_events - 1 do
-        local _, _, _, start_ppq, _, _, _, _ = reaper.MIDI_GetNote(midi_take, i)
-        local note_start_time = reaper.MIDI_GetProjTimeFromPPQPos(midi_take, start_ppq)
-        noteData[i] = { start_ppq = start_ppq, note_start_time = note_start_time }
-    end
-
-    local step_duration = reaper.TimeMap2_beatsToTime(0, 1) / time_resolution
-    local tolerance = step_duration / 2
-    local cursor_x, cursor_y = reaper.ImGui_GetCursorScreenPos(ctx)
-    local cursor_x = cursor_x + 245 * size_modifier
-    local x_padding = x_padding * size_modifier
-    local sliderWidth = sliderWidth * size_modifier
-    local sliderHeight = sliderHeight * size_modifier
-    local color1 = colorValues.color24_slider2  
-    local color2 = colorValues.color25_slider3
-    local dragStartedOnAnySlider = false
-
-    if anyMenuOpen == false then
-
-        if (mouse.isMouseDownL or mouse.isMouseDownR) and anyMenuOpen == false then
-            for i = 0, lengthSlider - 1 do
-                local sliderLeftX = cursor_x + (i * sliderWidth)
-                local sliderRightX = sliderLeftX + sliderWidth
-                local sliderTopY = cursor_y
-                local sliderBottomY = cursor_y + sliderHeight
-
-                if drag_start_x >= sliderLeftX and drag_start_x <= sliderRightX
-                    and drag_start_y >= sliderTopY and drag_start_y <= sliderBottomY then
-                    dragStartedOnAnySlider = true
-                    break
-                end
-            end
-        end
-
-        -- Left-click drag handling
-        if (mouse.isMouseDownL and dragStartedOnAnySlider) and anyMenuOpen == false then
-            draggingNow = true
-            -- Calculate the current and previous slider indices based on mouse position
-            local currentSliderIndex = math.floor((mouse.mouse_x - cursor_x) / sliderWidth)
-            local previousSliderIndex = math.floor((previous_mouse_x - cursor_x) / sliderWidth)
-            currentSliderIndex = math.max(0, math.min(currentSliderIndex, numberOfSliders - 1))
-            previousSliderIndex = math.max(0, math.min(previousSliderIndex, numberOfSliders - 1))
-            
-            -- Determine the range of sliders to update
-            local startIndex = math.min(currentSliderIndex, previousSliderIndex)
-            local endIndex = math.max(currentSliderIndex, previousSliderIndex)
-            
-            -- Update sliders in the determined range
-            for i = startIndex, endIndex do
-                local step_time = pattern_start + i * step_duration
-                local closestNoteIndex = nil
-                local closestNoteDistance = tolerance
-                
-                -- Find the closest note to this step time
-                for j = 0, num_events - 1 do
-                    local _, _, _, start_ppq, _, _, _, _ = reaper.MIDI_GetNote(midi_take, j)
-                    local note_start_time = reaper.MIDI_GetProjTimeFromPPQPos(midi_take, start_ppq)
-                    local distance = math.abs(note_start_time - step_time)
-                    if distance < closestNoteDistance then
-                        closestNoteIndex = j
-                        closestNoteDistance = distance
-                    end
-                end
-                -- print('st ' .. startIndex)
-                -- print('en ' .. endIndex)
-                if closestNoteIndex then
-                    local valueToApply
-                    if startIndex ~= endIndex then
-                        local relativePosition = (i - startIndex) / (endIndex - startIndex)
-                        local interpolated_y = previous_mouse_y + (mouse.mouse_y - previous_mouse_y) * relativePosition
-                        valueToApply = 1 - (interpolated_y - cursor_y) / sliderHeight
-                    else
-                        valueToApply = 1 - (mouse.mouse_y - cursor_y) / sliderHeight
-                    end
-                    -- Clamp the value between 0 and 1
-                    valueToApply = math.max(0, math.min(valueToApply, 1))
-                    
-                    -- Scale from 0 to 1 range to 36 to 84 range
-                    valueToApply = (valueToApply * (84 - 36)) + 36
-
-                    local new_pitch = math.max(1, math.min(math.floor(valueToApply), 127))
-                    if keys.altDown then
-                        new_pitch = 60
-                        updateMidiNotePitch(i + 1, new_pitch, midi_item, midi_take, num_events, pattern_start, step_duration, tolerance, noteData)
-
-                    else
-                        updateMidiNotePitch(i + 1, new_pitch, midi_item, midi_take, num_events, pattern_start, step_duration, tolerance, noteData)
-                    end
-                end
-                
-            end
-        else
-            draggingNow = false
-        end
-
-                -- Right-click drag handling
-        if mouse.isMouseDownR and dragStartedOnAnySlider and anyMenuOpen == false then
-            draggingNow = true
-            if not right_drag_start_x then
-                right_drag_start_x = mouse.mouse_x
-                right_drag_start_y = mouse.mouse_y
-                right_drag_velocity = true
-                for i = 0, numberOfSliders - 1 do
-                    local slider = slider[i + 1]
-                    slider.startValue = slider.value
-                    slider.startPos = cursor_x + (i * sliderWidth)
-                end
-            else
-                local tension = OnMouseWheel(mouse.mousewheel_v)
-                local drag_start_index = math.floor((right_drag_start_x - cursor_x) / sliderWidth)
-                local drag_end_index = math.floor((mouse.mouse_x - cursor_x) / sliderWidth)
-                local drag_min_index = math.min(drag_start_index, drag_end_index)
-                local drag_max_index = math.max(drag_start_index, drag_end_index)
-                local startYValue = 1 - (right_drag_start_y - cursor_y) / sliderHeight
-                local currentYValue = 1 - (mouse.mouse_y - cursor_y) / sliderHeight
-
-                for i = drag_min_index, drag_max_index do
-                    local step_time = pattern_start + i * step_duration
-                    local closestNoteIndex = nil
-                    local closestNoteDistance = tolerance
-
-                    -- Find the closest note to this step time
-                    for j = 0, num_events - 1 do
-                        local _, _, _, start_ppq, _, _, _, _ = reaper.MIDI_GetNote(midi_take, j)
-                        local note_start_time = reaper.MIDI_GetProjTimeFromPPQPos(midi_take, start_ppq)
-                        local distance = math.abs(note_start_time - step_time)
-                        if distance < closestNoteDistance then
-                            closestNoteIndex = j
-                            closestNoteDistance = distance
-                        end
-                    end
-
-                    if closestNoteIndex then
-                        local slider = slider[i + 1]
-                        if slider then
-                            local relativePos
-                            if drag_start_index == drag_end_index then
-                                -- If dragging started and ended on the same slider
-                                relativePos = (mouse.mouse_x - right_drag_start_x) / sliderWidth
-                            else
-                                -- Normal calculation for relative position
-                                relativePos = (slider.startPos - right_drag_start_x) / (mouse.mouse_x - right_drag_start_x)
-                            end
-                            relativePos = math.max(0, math.min(relativePos, 1)) -- Clamp the value
-
-                            local curveValue = applyCurveToValue(startYValue, currentYValue, relativePos, 1, tension)
-                            slider.value = math.max(0, math.min(curveValue, 1))
-
-                            -- Scale from 0 to 1 range to 36 to 84 range
-                            local new_pitch = (slider.value * (84 - 36)) + 36
-                            new_pitch = math.max(1, math.min(math.floor(new_pitch), 127))
-
-                            updateMidiNotePitch(i + 1, new_pitch, midi_item, midi_take, num_events, pattern_start, step_duration, tolerance, noteData)
-                        end
-                    end
-                end
-            end
-        end
-    else
-        draggingNow = false
-    end
-
-    -- Sliders
-    for i = 0, lengthSlider - 1 do
-        local step_time = pattern_start + i * step_duration
-        local slider_cursor_x = cursor_x + (i * sliderWidth)
-        local slider_value = 0.5 -- Default to middle value (60)
-        local note_value
-        local isNotePresent = false
-        -- Check for the presence of a note at this step and set slider_value if found
-        local numNotePositions = #note_positions
-        for idx = 1, numNotePositions do
-            local note_pos = note_positions[idx]
-            if math.abs(note_pos - step_time) <= tolerance then
-                slider_value = (note_pitches[idx] - 36) / 48 -- Scale from 0 to 1
-                note_value = translateNoteNumber(note_pitches[idx])
-                isNotePresent = true
-                break
-            end
-        end
-        
-        -- Display the slider
-        local color = (math.floor(i / 4) % 2 == 0) and color1 or color2
-
-        
-        local numColorsPushed, rv, slider_left, slider_top, slider_right, slider_bottom = obj_RectSliderMiddle(
-            ctx, slider_cursor_x, cursor_y, sliderWidth, sliderHeight, slider_value, drawList, x_padding, color,
-            isNotePresent, colorValues)
-          
-        
-        reaper.ImGui_PushFont(ctx, font_SliderValue) 
-        reaper.ImGui_DrawList_AddText(drawList, slider_left + x_padding, slider_bottom + 6, colorValues.color66_waveform, note_value)
-        reaper.ImGui_PopFont(ctx)
-
-
-    end
-
-    --Dummy Spacer
-    reaper.ImGui_Dummy(ctx, 0, sliderHeight)
-
-    -- Reset states on mouse release
-    if mouse.mouseReleasedR then
-        right_drag_start_x, right_drag_start_y = nil, nil
-
-    end
-
-    -- Update the previous mouse position for interpolation
-    previous_mouse_x, previous_mouse_y = mouse.mouse_x, mouse.mouse_y
-end
-
-local function obj_VelocitySliders(ctx, trackIndex, note_positions, note_velocities,
-                                   mouse, keys, numberOfSliders, sliderWidth, sliderHeight, x_padding, patternItems,
-                                   patternSelectSlider, colorValues)
-
-    local pattern_item, pattern_start, pattern_end, midi_item = getSelectedPatternItemAndMidiItem(trackIndex,
-        patternItems, patternSelectSlider)
-    if not midi_item then
-        return false
-    end
-    local midi_take = reaper.GetMediaItemTake(midi_item, 0)
-    local num_events, _, _, _ = reaper.MIDI_CountEvts(midi_take)
-    local noteData = {}
-    for i = 0, num_events - 1 do
-        local _, _, _, start_ppq, _, _, _, _ = reaper.MIDI_GetNote(midi_take, i)
-        local note_start_time = reaper.MIDI_GetProjTimeFromPPQPos(midi_take, start_ppq)
-        noteData[i] = { start_ppq = start_ppq, note_start_time = note_start_time }
-    end
-
-    local step_duration = reaper.TimeMap2_beatsToTime(0, 1) / time_resolution
-    local tolerance = step_duration / 2
-    local cursor_x, cursor_y = reaper.ImGui_GetCursorScreenPos(ctx)
-    local cursor_x = cursor_x + 245 * size_modifier
-    local x_padding = x_padding * size_modifier
-    local sliderWidth = sliderWidth * size_modifier
-    local sliderHeight = sliderHeight * size_modifier
-    local color1 = colorValues.color24_slider2  
-    local color2 = colorValues.color25_slider3
-    local dragStartedOnAnySlider = false
-
-    if anyMenuOpen == false then
-
-        if (mouse.isMouseDownL or mouse.isMouseDownR) and anyMenuOpen == false then
-            for i = 0, lengthSlider - 1 do
-                local sliderLeftX = cursor_x + (i * sliderWidth)
-                local sliderRightX = sliderLeftX + sliderWidth
-                local sliderTopY = cursor_y
-                local sliderBottomY = cursor_y + sliderHeight
-
-                if drag_start_x >= sliderLeftX and drag_start_x <= sliderRightX
-                    and drag_start_y >= sliderTopY and drag_start_y <= sliderBottomY then
-                    dragStartedOnAnySlider = true
-                    break
-                end
-            end
-        end
-
-        -- Left-click drag handling
-        if (mouse.isMouseDownL and dragStartedOnAnySlider) and anyMenuOpen == false then
-            draggingNow = true
-            -- Calculate the current and previous slider indices based on mouse position
-            local currentSliderIndex = math.floor((mouse.mouse_x - cursor_x) / sliderWidth)
-            local previousSliderIndex = math.floor((previous_mouse_x - cursor_x) / sliderWidth)
-            currentSliderIndex = math.max(0, math.min(currentSliderIndex, numberOfSliders - 1))
-            previousSliderIndex = math.max(0, math.min(previousSliderIndex, numberOfSliders - 1))
-            
-            -- Determine the range of sliders to update
-            local startIndex = math.min(currentSliderIndex, previousSliderIndex)
-            local endIndex = math.max(currentSliderIndex, previousSliderIndex)
-            
-            -- Update sliders in the determined range
-            for i = startIndex, endIndex do
-                local step_time = pattern_start + i * step_duration
-                local closestNoteIndex = nil
-                local closestNoteDistance = tolerance
-                
-                -- Find the closest note to this step time
-                for j = 0, num_events - 1 do
-                    local _, _, _, start_ppq, _, _, _, _ = reaper.MIDI_GetNote(midi_take, j)
-                    local note_start_time = reaper.MIDI_GetProjTimeFromPPQPos(midi_take, start_ppq)
-                    local distance = math.abs(note_start_time - step_time)
-                    if distance < closestNoteDistance then
-                        closestNoteIndex = j
-                        closestNoteDistance = distance
-                    end
-                end
-
-                
-                -- print('st ' .. startIndex)
-                -- print('en ' .. endIndex)
-                if closestNoteIndex then
-                    local valueToApply
-                    if startIndex ~= endIndex then
-                        local relativePosition = (i - startIndex) / (endIndex - startIndex)
-                        local interpolated_y = previous_mouse_y + (mouse.mouse_y - previous_mouse_y) * relativePosition
-                        valueToApply = 1 - (interpolated_y - cursor_y) / sliderHeight
-                    else
-                        valueToApply = 1 - (mouse.mouse_y - cursor_y) / sliderHeight
-                    end
-                    valueToApply = math.max(0, math.min(valueToApply, 1)) -- Clamp the value
     
-                    local new_velocity = math.max(1, math.floor(valueToApply * 127))
+    local normalizedValue = (value - params.min) / (params.max - params.min)
+    local curvedValue = normalizedValue ^ params.scaling
+    -- Mouse drag logic
+    local function updateValue(change, params, curvedValue, fineControl, delta)
+        local visualCurvedValue = curvedValue + change
+        visualCurvedValue = math.max(math.min(visualCurvedValue, 1), 0)
+        local normalizedValue = visualCurvedValue ^ (1 / params.scaling)
+        local newValue = params.min + normalizedValue * (params.max - params.min)
+        return newValue, visualCurvedValue
+    end
 
-                    if keys.altDown then
-                        new_velocity = 100
-                        updateMidiNoteVelocity(i + 1, new_velocity, midi_item, midi_take, num_events, pattern_start, step_duration, tolerance, noteData)
-                    else
+    local function updateValueSnapped(delta, speed, params, isWheel)
+        local factor = 300
+        local change = delta * speed * (params.max - params.min) / factor
+        local newValue = value + change
+    
+        if params.applySnap and params.snapAmount and params.snapAmount > 0 then
+            newValue = params.snapAmount * math.floor((newValue + params.snapAmount / 2) / params.snapAmount)
+        end
+    
+        return math.max(math.min(newValue, params.max), params.min)
+    end
 
-                    updateMidiNoteVelocity(i + 1, new_velocity, midi_item, midi_take, num_events, pattern_start, step_duration, tolerance, noteData)
-                    end
-                end
+    if reaper.ImGui_IsItemClicked(ctx, 0) then
+        local x, y = reaper.GetMousePosition()
+        dragStartPos[id] = { x = x, y = y }
+    end
+
+    if isActive then
+        
+
+        if os == "Win64" then
+            reaper.ImGui_SetMouseCursor(ctx, reaper.ImGui_MouseCursor_None())
+            mouse_x, mouse_y = reaper.GetMousePosition()
+            trackDeltaX = mouse_x - dragStartPos[id].x
+            trackDeltaY = mouse_y - dragStartPos[id].y    
+            if  reaper.JS_ReaScriptAPI_Version then
+                reaper.JS_Mouse_SetPosition(dragStartPos[id].x, dragStartPos[id].y)
             end
         else
-            draggingNow = false
+            trackDeltaX = mouse.delta_x
+            trackDeltaY = mouse.delta_y
         end
 
-        -- Right-click drag handling
-        if mouse.isMouseDownR and dragStartedOnAnySlider and anyMenuOpen == false then
-            draggingNow = true
-            if not right_drag_start_x then
-                right_drag_start_x = mouse.mouse_x
-                right_drag_start_y = mouse.mouse_y
-                right_drag_velocity = true
-                for i = 0, numberOfSliders - 1 do
-                    local slider = slider[i + 1]
-                    slider.startValue = slider.value
-                    slider.startPos = cursor_x + (i * sliderWidth)
-                end
+        local delta = params.dragDirection == 'Horizontal' and trackDeltaX or -trackDeltaY
+        if delta ~= 0.0 then
+            local fineControl = (keys.shiftDown or keys.ctrlDown or keys.ctrlShiftDown)
+            local change = (delta * (params.max - params.min) / overallSensitivity) * dragSensitivity
+            if params.applySnap and not fineControl then
+                value = updateValueSnapped(delta, dragSensitivity, params, false)
+
             else
-                local tension = OnMouseWheel(mouse.mousewheel_v)
-                local drag_start_index = math.floor((right_drag_start_x - cursor_x) / sliderWidth)
-                local drag_end_index = math.floor((mouse.mouse_x - cursor_x) / sliderWidth)
-                local drag_min_index = math.min(drag_start_index, drag_end_index)
-                local drag_max_index = math.max(drag_start_index, drag_end_index)
-                local startYValue = 1 - (right_drag_start_y - cursor_y) / sliderHeight
-                local currentYValue = 1 - (mouse.mouse_y - cursor_y) / sliderHeight
+                value, curvedValue = updateValue(change, params, curvedValue, fineControl, delta)
+            end
+            rv = true
+        end
+    end
+    
+    -- Mouse wheel logic
+    if reaper.ImGui_IsItemHovered(ctx) and mouse.mousewheel_v ~= 0 then
+        local fineControl = (keys.shiftDown or keys.ctrlDown or keys.ctrlShiftDown)
+        local wheelChange = mouse.mousewheel_v * wheelSensitivity / 45
+        value, curvedValue = updateValue(wheelChange, params, curvedValue, fineControl)
+        rv = true
+    end
 
-                for i = drag_min_index, drag_max_index do
-                    local slider = slider[i + 1]
-                    if slider then
-                        local relativePos
-                        if drag_start_index == drag_end_index then
-                            -- If dragging started and ended on the same slider
-                            relativePos = (mouse.mouse_x - right_drag_start_x) / sliderWidth
-                        else
-                            -- Normal calculation for relative position
-                            relativePos = (slider.startPos - right_drag_start_x) / (mouse.mouse_x - right_drag_start_x)
-                        end
-                        relativePos = math.max(0, math.min(relativePos, 1)) -- Clamp the value
+    -- Double-click to reset
+    if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsMouseDoubleClicked(ctx, 0) then
+        value = params.default
+        rv = true
+    end
 
-                        local curveValue = applyCurveToValue(startYValue, currentYValue, relativePos, 1, tension)
-                        slider.value = math.max(0, math.min(curveValue, 1))
-                        -- Update MIDI note velocity based on the slider's new value
-                        local new_velocity = math.max(1, math.floor(slider.value * 127))
-
-                        if keys.altDown then
-                            new_velocity = 100
-                            updateMidiNoteVelocity(i + 1, new_velocity, midi_item, midi_take, num_events, pattern_start, step_duration, tolerance, noteData)
-                        else
-
-                        updateMidiNoteVelocity(i + 1, new_velocity, midi_item,
-                            midi_take, num_events, pattern_start, step_duration, tolerance, noteData)
-                        end
-                    end
+    if rv then
+        local scaleFactor = value / 100  -- Assuming the knob value ranges from 0 to 100
+        
+        -- Iterate over all sliders and update the velocities of their corresponding notes
+        for i = 0, numberOfSliders - 1 do
+            local step_time = pattern_start + i * step_duration
+            local closestNoteIndex = nil
+            local closestNoteDistance = tolerance
+            
+            -- Find the closest note to this step time
+            for j = 0, num_events - 1 do
+                local _, _, _, start_ppq, _, _, _, _ = reaper.MIDI_GetNote(midi_take, j)
+                local note_start_time = reaper.MIDI_GetProjTimeFromPPQPos(midi_take, start_ppq)
+                local distance = math.abs(note_start_time - step_time)
+                if distance < closestNoteDistance then
+                    closestNoteIndex = j
+                    closestNoteDistance = distance
                 end
             end
-        end
-    else
-        draggingNow = false
-    end
-
-    -- Sliders
-    for i = 0, lengthSlider - 1 do
-        local step_time = pattern_start + i * step_duration
-        local slider_cursor_x = cursor_x + (i * sliderWidth)
-        local slider_value = nil -- Default to no value
-        local isNotePresent = false
-        -- Check for the presence of a note at this step and set slider_value if found
-        local numNotePositions = #note_positions
-        for idx = 1, numNotePositions do
-            local note_pos = note_positions[idx]
-            if math.abs(note_pos - step_time) <= tolerance then
-                slider_value = note_velocities[idx] / 127
-                isNotePresent = true
-                break
+            
+            if closestNoteIndex then
+                local _, _, _, _, _, _, _, _, velocity = reaper.MIDI_GetNote(midi_take, closestNoteIndex)
+                local new_velocity = math.floor(velocity * scaleFactor)
+                new_velocity = math.max(1, math.min(new_velocity, 127))  -- Clamp the velocity within valid range
+                
+                updateMidiNoteVelocity(i + 1, new_velocity, midi_item, midi_take, num_events, pattern_start, step_duration, tolerance, noteData)
             end
         end
-
-        -- Display the slider
-        local color = (math.floor(i / 4) % 2 == 0) and color1 or color2
-        local numColorsPushed, rv, slider_left, slider_top, slider_right, slider_bottom = obj_RectSlider(
-            ctx, slider_cursor_x, cursor_y, sliderWidth, sliderHeight, slider_value, drawList, x_padding, color,
-            isNotePresent, colorValues)
     end
 
-    --Dummy Spacer
-    reaper.ImGui_Dummy(ctx, 0, sliderHeight)
+    -- Draw the knob
+    local currentFrame = math.floor(curvedValue * (params.frameCount - 1)) + 1
+    local uv0x = 0
+    local uv0y = ((currentFrame - 1) * params.frameHeight) / imageParams.y
+    local uv1x = params.frameWidth / imageParams.x
+    local uv1y = uv0y + params.frameHeight / imageParams.y
 
-    -- Reset states on mouse release
-    if mouse.mouseReleasedR then
-        right_drag_start_x, right_drag_start_y = nil, nil
+    reaper.ImGui_Image(ctx, imageParams.i, params.frameWidth, params.frameHeight, uv0x, uv0y, uv1x, uv1y)
 
+    -- Right-click menu
+    if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsItemClicked(ctx, 1) then
+        reaper.ImGui_OpenPopup(ctx, id)
     end
 
-    -- Update the previous mouse position for interpolation
-    previous_mouse_x, previous_mouse_y = mouse.mouse_x, mouse.mouse_y
+    if reaper.ImGui_BeginPopup(ctx, id, reaper.ImGui_WindowFlags_NoMove()) then
+        value, rv = obj_Knob_Menu(ctx, value)
+    end
+
+    if reaper.ImGui_IsItemHovered(ctx) or isActive then
+        hoveredControlInfo.id = string.gsub(id, "%d", "")                    -- Remove the numeric part from the id
+        hoveredControlInfo.id = string.gsub(hoveredControlInfo.id, "##", "") -- Remove the "##" prefix if it exists
+        hoveredControlInfo.value = value
+    end
+    return rv, value
 end
 
 
@@ -3099,7 +3254,7 @@ local function last_tr_in_folder(folder_tr)
 end
 
 -- Insert New Track
-local function insertNewTrack(filename, track_suffix, track_count)
+local function insertNewTrack(filename, track_suffix, track_count, insertIndex)
     -- Find the index of the last "Patterns SEQ" track
     local track_count = reaper.CountTracks(0)
     local last_patterns_seq_index = -1
@@ -3107,30 +3262,40 @@ local function insertNewTrack(filename, track_suffix, track_count)
     local num_tracks = reaper.CountTracks(0)
     local insert_track_index = -1
 
-    for track_index = 0, num_tracks - 1 do
-        local track = reaper.GetTrack(0, track_index)
-        local _, track_name = reaper.GetTrackName(track)
-        local current_folder_depth = reaper.GetMediaTrackInfo_Value(track, "I_FOLDERDEPTH")
+    if insertIndex ~= nil then
+        -- print(insertIndex)
+        insert_track_index = insertIndex
+        local last_track = reaper.GetTrack(0, insert_track_index)
+        last_track_depth = reaper.GetMediaTrackInfo_Value(last_track, "I_FOLDERDEPTH")
+    else
 
-        if track_name == "Patterns SEQ" then
-            last_patterns_seq_index = track_index
-            folder_depth = current_folder_depth
-            -- Find the last track in the folder
-            last_track = last_tr_in_folder(track)
-            insert_track_index = reaper.GetMediaTrackInfo_Value(last_track, "IP_TRACKNUMBER")
-            last_track_depth = reaper.GetMediaTrackInfo_Value(last_track, "I_FOLDERDEPTH")
-            break
+        for track_index = 0, num_tracks - 1 do
+            local track = reaper.GetTrack(0, track_index)
+            local _, track_name = reaper.GetTrackName(track)
+            local current_folder_depth = reaper.GetMediaTrackInfo_Value(track, "I_FOLDERDEPTH")
+
+            if track_name == "Patterns SEQ" then
+                last_patterns_seq_index = track_index
+                folder_depth = current_folder_depth
+                -- Find the last track in the folder
+                last_track = last_tr_in_folder(track)
+                insert_track_index = reaper.GetMediaTrackInfo_Value(last_track, "IP_TRACKNUMBER")
+                last_track_depth = reaper.GetMediaTrackInfo_Value(last_track, "I_FOLDERDEPTH")
+                break
+            end
         end
     end
 
     if insert_track_index >= 0 then
-
+        
         reaper.InsertTrackAtIndex(insert_track_index, false)
         reaper.TrackList_AdjustWindows(false)
         local new_track = reaper.GetTrack(0, insert_track_index)
         -- Ensure the new track is inside the folder and not a folder itself
-        reaper.SetMediaTrackInfo_Value(last_track, "I_FOLDERDEPTH", 0)
-        reaper.SetMediaTrackInfo_Value(new_track, "I_FOLDERDEPTH", -1)
+        if insertIndex == nil then
+            reaper.SetMediaTrackInfo_Value(last_track, "I_FOLDERDEPTH", 0)
+            reaper.SetMediaTrackInfo_Value(new_track, "I_FOLDERDEPTH", -1)
+        end
 
         if new_track then
             -- Extract the name from the path and remove the .wav file extension
@@ -3452,7 +3617,24 @@ local function obj_Channel_Button(ctx, track, actualTrackIndex, buttonIndex, mou
         local dragged = true
     end
 
+
+
+    -- if reaper.ImGui_BeginDragDropTarget(ctx) then
+    --     if reaper.ImGui_IsItemHovered(ctx) then
+    --         print('sdsad')
+    --     end
+
+    --     -- local _, input_path = reaper.ImGui_GetDragDropPayloadFile(ctx, 0)  -- CHECK IF IS A VALID PATH
+    --     --  print(input_path)  
+    --     if reaper.ImGui_AcceptDragDropPayloadFiles(ctx) then -- Released
+
+    --     end
+    --     reaper.ImGui_EndDragDropTarget(ctx)
+    -- end
+
     if reaper.ImGui_BeginDragDropTarget(ctx) then
+
+
 
         reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_DragDropTarget(), colorValues.color33_channelbutton_dropped)
         local rv, count = reaper.ImGui_AcceptDragDropPayloadFiles(ctx)
@@ -3536,6 +3718,32 @@ local function obj_Channel_Button(ctx, track, actualTrackIndex, buttonIndex, mou
         menu_open[buttonIndex] = true
     elseif not reaper.ImGui_IsPopupOpen(ctx, contextMenuID) then
         menu_open[buttonIndex] = false
+    end
+
+    -- reaper.ImGui_PopStyleColor(ctx, 1)
+end
+
+local function obj_Channel_Button_InBetween(ctx, track, actualTrackIndex, buttonIndex, mouse, patternItems, track_count, colorValues, mouse, keys)
+    -- reaper.ImGui_Button(ctx, 'gg', 93, 16)
+    reaper.ImGui_InvisibleButton(ctx, 'gg', 93, 16)
+
+    if reaper.ImGui_IsItemHovered(ctx) then
+        hoveredControlInfo.id = actualTrackIndex
+    end
+    
+    if reaper.ImGui_BeginDragDropTarget(ctx) then
+        local rv, count = reaper.ImGui_AcceptDragDropPayloadFiles(ctx)
+        if rv then
+            for i = 0, count - 1 do
+                local filename
+                rv, filename = reaper.ImGui_GetDragDropPayloadFile(ctx, i)
+                insertNewTrack(filename, track_suffix, track_count, actualTrackIndex)
+                -- trackWasInserted = true
+                update_required = true
+            end
+        end
+    
+        reaper.ImGui_EndDragDropTarget(ctx)
     end
 end
 
@@ -4539,7 +4747,7 @@ local function obj_PlayCursor_Buttons(ctx, mouse, keys, patternSelectSlider, col
         local isMouseOverButton = mouse.mouse_x >= button_left and mouse.mouse_x <= button_right and
         mouse.mouse_y >= button_top and mouse.mouse_y <= button_bottom
         
-        if active_lane == nil and anyMenuOpen == false and not draggingNow then
+        if active_lane == nil and anyMenuOpen == false and draggingNow == false then
             isHovered.PlayCursor[i] = isMouseOverButton
 
             -- Check for mouse click or dragging over the button
@@ -5061,7 +5269,7 @@ local function obj_Add_Channel_Button(track_suffix, ctx, count_tracks, colorValu
             for i = 0, count - 1 do
                 local filename
                 rv, filename = reaper.ImGui_GetDragDropPayloadFile(ctx, i)
-                insertNewTrack(filename, track_suffix, count_tracks)
+                insertNewTrack(filename, track_suffix, count_tracks, nil)
                 update_required = true
             end
             trackWasInserted = true
@@ -5093,7 +5301,7 @@ local function obj_Invisible_Channel_Button(track_suffix, ctx, count_tracks, col
             for i = 0, count - 1 do
                 local filename
                 rv, filename = reaper.ImGui_GetDragDropPayloadFile(ctx, i)
-                insertNewTrack(filename, track_suffix, count_tracks)
+                insertNewTrack(filename, track_suffix, count_tracks, nil)
                 trackWasInserted = true
                 update_required = true
             end
@@ -5188,7 +5396,7 @@ local function obj_Selector(ctx, trackIndex, track, width, height, color, border
 
     local unselect = false
 
-    if active_lane == nil and anyMenuOpen == false and not draggingNow then
+    if active_lane == nil and anyMenuOpen == false and draggingNow == false then
         if keys.ctrlDown and reaper.ImGui_IsItemClicked(ctx, 0) then
             if isSelected == true then
                 unselect = true
@@ -5213,6 +5421,8 @@ local function obj_Selector(ctx, trackIndex, track, width, height, color, border
         elseif mouse.isMouseDownR and mouse.mouse_x >= button_left and mouse.mouse_x <= button_right and mouse.mouse_y >= button_top and mouse.mouse_y <= button_bottom then
             reaper.SetTrackSelected(track, false)
         end
+    else
+        draggingNow = false
     end
 end
 
@@ -5456,9 +5666,9 @@ local function obj_Preferences(ctx)
         
         -- Store the original settings before any changes are made
         originalLeftClickDelete = leftClickDelete
-        originalSizeModifier = size_modifier
-        originalObjX = obj_x
-        originalObjY = obj_y
+        -- originalSizeModifier = size_modifier
+        -- originalObjX = obj_x
+        -- originalObjY = obj_y
         originalTimeRes = time_resolution
         originalfindTempoMarker = vfindTempoMarker
         originalFontSize = fontSize
@@ -5523,7 +5733,7 @@ local function obj_Preferences(ctx)
             -- Save the modified settings to ExtState
             
             reaper.SetExtState("McSequencer", "leftClickDelete", tostring(leftClickDelete), true)
-            reaper.SetExtState("McSequencer", "SizeModifier", tostring(size_modifier), true)
+            -- reaper.SetExtState("McSequencer", "SizeModifier", tostring(size_modifier), true)
             reaper.SetExtState("McSequencer", "ObjX", tostring(obj_x), true)
             reaper.SetExtState("McSequencer", "ObjY", tostring(obj_y), true)
             reaper.SetExtState("McSequencer", "TimeResolution", tostring(time_resolution), true)
@@ -5538,9 +5748,9 @@ local function obj_Preferences(ctx)
         if reaper.ImGui_Button(ctx, 'Cancel', 120, 0) then
             -- Revert to original settings
             leftClickDelete = originalLeftClickDelete
-            size_modifier = originalSizeModifier
-            obj_x = originalObjX
-            obj_y = originalObjY
+            -- size_modifier = originalSizeModifier
+            -- obj_x = originalObjX
+            -- obj_y = originalObjY
             time_resolution = originalTimeRes
             vfindTempoMarker = originalfindTempoMarker
             fontSize = originalFontSize
@@ -5553,8 +5763,10 @@ local function obj_Preferences(ctx)
 end
 
 local function getPreferences()
-    local size_modifier = tonumber(reaper.GetExtState("McSequencer", "SizeModifier"))
-    if not size_modifier then size_modifier = 1 end
+    -- local size_modifier = tonumber(reaper.GetExtState("McSequencer", "SizeModifier"))
+    -- if not size_modifier then size_modifier = 1 end
+    -- print(size_modifier)
+    size_modifier = 1
     local obj_x = tonumber(reaper.GetExtState("McSequencer", "ObjX"))
     if not obj_x then obj_x = 20 end
     local obj_y = tonumber(reaper.GetExtState("McSequencer", "ObjY"))
@@ -5718,10 +5930,8 @@ function loop()
 
         obj_Preferences(ctx)
 
-        -- local tableflags0 = reaper.ImGui_tableflags
-        -- reaper.ImGui_BeginTable(ctx, "table 0", 1, tableflags0, window_width - 15)
-
         ----- TOP ROW -----
+        reaper.ImGui_Dummy(ctx, 0, 2)
         local tableflags0 = nil;
         if reaper.ImGui_BeginChild(ctx, 'Top Row', nil, top_row_x * size_modifier, 0, reaper.ImGui_WindowFlags_NoScrollbar() | reaper.ImGui_WindowFlags_NoScrollWithMouse()) then
             -- color picker
@@ -5729,7 +5939,7 @@ function loop()
                 colors.obj_ColorPicker(ctx);
                 top_row_x = 420
             else
-                top_row_x = 32
+                top_row_x = 30
             end;
 
             reaper.ImGui_SameLine(ctx);
@@ -5748,6 +5958,9 @@ function loop()
 
             obj_New_Pattern(ctx, patternItems, colorValues, maxPatternNumber, track_count)
 
+            reaper.ImGui_SameLine(ctx);
+            -- reaper.ImGui_Button(ctx, 'associated', 2111, 22)
+
             -- --test
             -- reaper.ImGui_SameLine(ctx);
             -- if  obj_Button(ctx,"Test", false, colorValues.color61_button_sidebar_active, colorValues.color62_button_sidebar_inactive, colorValues.color63_button_sidebar_border, 1, 99, 23) then      --
@@ -5756,20 +5969,106 @@ function loop()
             --     end
             -- end
 
-            reaper.ImGui_SameLine(ctx, window_width - 85 * size_modifier);
-
-            -- velocity sliders show button
-            -- if obj_Button(ctx, "Velocity", false, colorValues.color34_channelbutton_active, colorValues.color32_channelbutton, colorValues.color35_channelbutton_frame, 1, 66 * size_modifier, 22 * size_modifier, "Show velocity sliders") then
-            --     show_VelocitySliders = not show_VelocitySliders;
-            -- end;
-
-            local dl = reaper.ImGui_GetWindowDrawList(ctx)
-            local wx, wy = reaper.ImGui_GetCursorScreenPos(ctx)
-            reaper.ImGui_DrawList_AddLine(dl, wx, wy, wx + window_width, wy, colorValues.color6_separator,
-                1 * size_modifier)
 
             reaper.ImGui_EndChild(ctx)
         end
+
+
+        if reaper.ImGui_BeginChild(ctx, "Middle Row", -controlSidebarWidth - 14, 42, false,  reaper.ImGui_WindowFlags_NoScrollbar() | reaper.ImGui_WindowFlags_NoScrollWithMouse()) then
+
+            local parentIndex = parent.GUID.trackIndex[0]
+            local track = parent.GUID[0]
+
+            reaper.ImGui_Dummy(ctx, 0, 0)
+            reaper.ImGui_SameLine(ctx, 0, 3 * size_modifier);
+            adjustCursorPos(ctx, 0, 9)
+
+            parent.GUID.expand.open[1] = obj_Expand(ctx, parent.GUID.expand.open[1], track, mouse,
+                keys)
+            reaper.ImGui_SameLine(ctx, 0, 3 * size_modifier);
+            adjustCursorPos(ctx, 0, 5)
+
+            -- Mute Button
+            parent.GUID.mute[0] = obj_muteButton(ctx, parent.GUID.mute[0], parent.GUID[0], 22, 22, mouse, keys)
+            reaper.ImGui_SameLine(ctx, 0, 3 * size_modifier);
+            adjustCursorPos(ctx, -3, 5)
+
+            -- Solo Button
+            parent.GUID.solo[0] = obj_soloButton(ctx, parent.GUID.solo[0], parent.GUID[0], 22, 22, mouse, keys)
+            reaper.ImGui_SameLine(ctx, 0, 5 * size_modifier);
+            -- if size_modifier >= 1.3 then adjustCursorPos(ctx, 0, 6 * size_modifier) end
+            -- adjustCursorPos(ctx, 0, -18)
+
+            -- Volume Knob
+            _, parent.GUID.volume[0] = obj_Knob2(ctx, images.Knob_2, "##ParentVolume", parent.GUID.volume[0],
+                params.knobVolume, mouse, keys)
+
+            reaper.ImGui_SameLine(ctx, 0, 5 * size_modifier);
+            -- if size_modifier >= 1.3 then adjustCursorPos(ctx, 0, 2 * size_modifier) end
+
+            -- Pan Knob
+            _, parent.GUID.pan[0] = obj_Knob2(ctx, images.Knob_Pan, "##Panparent", parent.GUID.pan[0], params.knobPan,
+                mouse, keys)
+            reaper.ImGui_SameLine(ctx, 0, 4 * size_modifier);
+            -- adjustCursorPos(ctx, 0, -9)
+
+            -- Channel Button
+            obj_Channel_Button(ctx, track, parentIndex, 0, mouse, patternItems, track_count, colorValues, mouse, keys);
+            reaper.ImGui_SameLine(ctx, 0, 0);
+            -- adjustCursorPos(ctx, 0, -9)
+
+            -- Selector
+            obj_Selector(ctx, parentIndex, parent.GUID[0], obj_x, obj_y, colorValues.color30_selector, 3,
+                colorValues.color31_selector_frame, 0,
+                mouse, keys);
+            reaper.ImGui_SameLine(ctx, 0, 1 * size_modifier);
+            -- adjustCursorPos(ctx, 0, -9)
+
+            -- play cursor buttons
+            obj_PlayCursor_Buttons(ctx, mouse, keys, patternSelectSlider, colorValues);
+            -- reaper.ImGui_SameLine(ctx, 0, 1 * size_modifier);
+            -- reaper.ImGui_Button(ctx, 'hh', 10, 10)
+            -- adjustCursorPos(ctx, 0, 1)
+
+            -- adjustCursorPos(ctx, 0, -9)
+
+            -- reaper.ImGui_Dummy(ctx, 0, 0)
+            -- if reaper.GetExtState("McSequencer", "ScrollX") then
+            --     seqScrollXExt = tonumber(reaper.GetExtState("McSequencer", "ScrollX"))
+            --     if seqScrollXExt then
+            --         reaper.ImGui_SetScrollX(ctx, seqScrollXExt)
+            --     end
+            -- end
+            reaper.ImGui_EndChild(ctx)
+            
+        end
+        
+        reaper.ImGui_SameLine(ctx, 0, 18)
+        if reaper.ImGui_BeginChild(ctx, "Sidebar Selector Buttons", 220, 36, false) then
+
+            -- buttonXSize = 68
+            -- buttonYSize = 36
+            -- reaper.ImGui_Button(ctx, 'Sample', buttonXSize, buttonYSize)
+            -- reaper.ImGui_SameLine(ctx)
+            -- adjustCursorPos(ctx, -8, 0)
+            -- reaper.ImGui_Button(ctx, 'Slider', buttonXSize, buttonYSize)
+            -- reaper.ImGui_SameLine(ctx)
+            -- adjustCursorPos(ctx, -8, 0)
+            -- reaper.ImGui_Button(ctx, 'FX', buttonXSize, buttonYSize)
+
+            reaper.ImGui_EndChild(ctx)
+        end
+
+            --         --- DELETE POPUP ------
+            -- if showPopup then
+            --     unselectNonSuffixedTracks()
+            --     local track_count = reaper.CountSelectedTracks(0)
+            --     confirmed = popup
+               
+            --     if confirmed then
+            --         deleteTrack(trackIndex)
+            --     end
+            -- end
 
         if reaper.ImGui_IsAnyItemHovered(ctx) then
             sequencerFlags = reaper.ImGui_WindowFlags_NoScrollWithMouse() |
@@ -5778,181 +6077,132 @@ function loop()
             sequencerFlags = reaper.ImGui_WindowFlags_HorizontalScrollbar()
         end
 
-        -----  MIDDLE ROW -----
-        if reaper.ImGui_BeginChild(ctx, "Middle Row", -controlSidebarWidth, -27, false, sequencerFlags) then
 
-            local parentIndex = parent.GUID.trackIndex[0]
-            local track = parent.GUID[0]
-            --
-            reaper.ImGui_Dummy(ctx, 0, 0)
-            reaper.ImGui_SameLine(ctx, 0, 3 * size_modifier);
-            adjustCursorPos(ctx, -6, 6)
+        if reaper.ImGui_BeginChild(ctx, "Sequencer Row", -controlSidebarWidth, -27, false, sequencerFlags) then
 
-            
-            -- adjustCursorPos(ctx, -1, 9)
-            adjustCursorPos(ctx, 3, 4)
+            -- seqScrollX = reaper.ImGui_GetScrollX(ctx)
+            -- if seqScrollX ~= 0 then
+            --     reaper.SetExtState("McSequencer", "ScrollX", tostring(seqScrollX), true)
+            --     print(seqScrollX)
+            -- end
 
-            parent.GUID.expand.open[1] = obj_Expand(ctx, parent.GUID.expand.open[1], track, mouse,
-                keys)
-            reaper.ImGui_SameLine(ctx, 0, 3 * size_modifier);
-            adjustCursorPos(ctx, 0, 6)
+            reaper.ImGui_Dummy(ctx, 0, 4)
 
-            -- Mute Button
-            parent.GUID.mute[0] = obj_muteButton(ctx, parent.GUID.mute[0], parent.GUID[0], 22, 22, mouse, keys)
-            reaper.ImGui_SameLine(ctx, 0, 3 * size_modifier);
-            adjustCursorPos(ctx, -3, 6)
 
-            -- Solo Button
-            parent.GUID.solo[0] = obj_soloButton(ctx, parent.GUID.solo[0], parent.GUID[0], 22, 22, mouse, keys)
-            reaper.ImGui_SameLine(ctx, 0, 5 * size_modifier);
-            if size_modifier >= 1.3 then adjustCursorPos(ctx, 0, 2 * size_modifier) end
-
-            -- Volume Knob
-            _, parent.GUID.volume[0] = obj_Knob2(ctx, images.Knob_2, "##ParentVolume", parent.GUID.volume[0],
-                params.knobVolume, mouse, keys)
-
-            reaper.ImGui_SameLine(ctx, 0, 5 * size_modifier);
-            if size_modifier >= 1.3 then adjustCursorPos(ctx, 0, 2 * size_modifier) end
-
-            -- Pan Knob
-            _, parent.GUID.pan[0] = obj_Knob2(ctx, images.Knob_Pan, "##Panparent", parent.GUID.pan[0], params.knobPan,
-                mouse, keys)
-            reaper.ImGui_SameLine(ctx, 0, 4 * size_modifier);
-
-            -- Channel Button
-            obj_Channel_Button(ctx, track, parentIndex, 0, mouse, patternItems, track_count, colorValues, mouse, keys);
-            reaper.ImGui_SameLine(ctx, 0, 0);
-
-            -- Selector
-            obj_Selector(ctx, parentIndex, parent.GUID[0], obj_x, obj_y, colorValues.color30_selector, 3,
-                colorValues.color31_selector_frame, 0,
-                mouse, keys);
-            reaper.ImGui_SameLine(ctx, 0, 1 * size_modifier);
-
-            -- play cursor buttons
-            obj_PlayCursor_Buttons(ctx, mouse, keys, patternSelectSlider, colorValues);
-            adjustCursorPos(ctx, 0, 1)
-
-            reaper.ImGui_Dummy(ctx, 0, 0)
-
-            ----- DELETE POPUP ------
-
-            if showPopup then
-                unselectNonSuffixedTracks()
-                local track_count = reaper.CountSelectedTracks(0)
-                confirmed = popup(ctx, track_count)
-                if confirmed then
-                    deleteTrack(trackIndex)
-                end
-            end
-
-            -----  SEQUENCER -----
             if channel and channel.channel_amount then
-                -- if reaper.ImGui_BeginChild(ctx, "Sequencer Row", -controlSidebarWidth, - 27, false, sequencerFlags) then
-                adjustCursorPos(ctx, -2, -2)
-                -- reaper.ImGui_ListClipper_Begin(clipper, channel.channel_amount) --
                 for i = 1, channel.channel_amount do
-                -- while reaper.ImGui_ListClipper_Step(clipper) do
-                    -- local display_start, display_end = reaper.ImGui_ListClipper_GetDisplayRange(clipper)
-                    -- for i = display_start, display_end - 1 do
-                        local curx, cury = reaper.ImGui_GetCursorScreenPos(ctx)
-                        -- print(cury)
-                        local visible = reaper.ImGui_IsRectVisible(ctx, 11, 32)
-                        if visible then 
-                            -- reaper.ImGui_IsRectVisible(ctx, size_w, size_h)
-                            local x, y = reaper.ImGui_GetWindowContentRegionMax(ctx)
-                            local track = channel.GUID[i-1]
-                            local actualTrackIndex = channel.GUID.trackIndex[i];
-                            local pattern_item, pattern_start, pattern_end, midi_item = getSelectedPatternItemAndMidiItem(
-                                actualTrackIndex, patternItems, patternSelectSlider)
-                            local note_positions, note_velocities, note_pitches = populateNotePositions(midi_item)
+                    local curx, cury = reaper.ImGui_GetCursorScreenPos(ctx)
 
-                            reaper.ImGui_Dummy(ctx, 0, 0)
-                            reaper.ImGui_SameLine(ctx, 0, 3 * size_modifier);
+                    local xthing = reaper.ImGui_GetContentRegionAvail(ctx)
+                    local visibleRow = reaper.ImGui_IsRectVisible(ctx, xthing, 32)
+                    if visibleRow then
+                        local x, y = reaper.ImGui_GetWindowContentRegionMax(ctx)
+                        local track = channel.GUID[i - 1]
+                        local actualTrackIndex = channel.GUID.trackIndex[i];
+                        local pattern_item, pattern_start, pattern_end, midi_item = getSelectedPatternItemAndMidiItem(
+                            actualTrackIndex, patternItems, patternSelectSlider)
+                        local note_positions, note_velocities, note_pitches = populateNotePositions(midi_item)
 
-                            adjustCursorPos(ctx, -1, 9)
+                        reaper.ImGui_Dummy(ctx, 0, 0)
+                        reaper.ImGui_SameLine(ctx, 0, 4 * size_modifier);
 
-                            channel.GUID.expand.open[i] = obj_Expand(ctx, channel.GUID.expand.open[i], track, mouse,
-                                keys)
-                            reaper.ImGui_SameLine(ctx, 0, 3 * size_modifier);
-                            adjustCursorPos(ctx, 0, 5)
+                        adjustCursorPos(ctx, -1, 9)
 
-                            -- Mute Button
-                            channel.GUID.mute[i] = obj_muteButton(ctx, channel.GUID.mute[i], track, mouse, keys)
-                            reaper.ImGui_SameLine(ctx, 0, 3 * size_modifier);
-                            adjustCursorPos(ctx, -3, 5)
+                        -- Expand Sliders Button
+                        channel.GUID.expand.open[i] = obj_Expand(ctx, channel.GUID.expand.open[i], track, mouse,
+                            keys)
+                        reaper.ImGui_SameLine(ctx, 0, 3 * size_modifier);
+                        adjustCursorPos(ctx, 0, 5)
 
-                            -- Solo Button
-                            channel.GUID.solo[i] = obj_soloButton(ctx, channel.GUID.solo[i], track, mouse, keys)
-                            reaper.ImGui_SameLine(ctx, 0, 5 * size_modifier);
-                            if size_modifier >= 1.3 then adjustCursorPos(ctx, 0, 2 * size_modifier) end
+                        -- Mute Button
+                        channel.GUID.mute[i] = obj_muteButton(ctx, channel.GUID.mute[i], track, mouse, keys)
+                        reaper.ImGui_SameLine(ctx, 0, 3 * size_modifier);
+                        adjustCursorPos(ctx, -3, 5)
 
-                            -- Volume Knob
-                            _, channel.GUID.volume[i] = obj_Knob2(ctx, images.Knob_2, "##Volume" .. i,
-                                channel.GUID.volume[i], params.knobVolume, mouse, keys)
-                            reaper.ImGui_SameLine(ctx, 0, 5 * size_modifier);
+                        -- Solo Button
+                        channel.GUID.solo[i] = obj_soloButton(ctx, channel.GUID.solo[i], track, mouse, keys)
+                        reaper.ImGui_SameLine(ctx, 0, 5 * size_modifier);
+                        if size_modifier >= 1.3 then adjustCursorPos(ctx, 0, 2 * size_modifier) end
 
-                            -- Pan Knob
-                            _, channel.GUID.pan[i] = obj_Knob2(ctx, images.Knob_Pan, "##Pan" .. i,
-                                channel.GUID.pan[i], params.knobPan, mouse, keys)
-                            reaper.ImGui_SameLine(ctx, 0, 4 * size_modifier);
+                        -- Volume Knob
+                        _, channel.GUID.volume[i] = obj_Knob2(ctx, images.Knob_2, "##Volume" .. i,
+                            channel.GUID.volume[i], params.knobVolume, mouse, keys)
+                        reaper.ImGui_SameLine(ctx, 0, 5 * size_modifier);
 
-                            -- Channel Button
-                            obj_Channel_Button(ctx, track, actualTrackIndex, i, mouse, patternItems, track_count,
-                                colorValues, mouse, keys);
-                            reaper.ImGui_SameLine(ctx, 0, 0);
+                        -- Pan Knob
+                        _, channel.GUID.pan[i] = obj_Knob2(ctx, images.Knob_Pan, "##Pan" .. i,
+                            channel.GUID.pan[i], params.knobPan, mouse, keys)
+                        reaper.ImGui_SameLine(ctx, 0, 4 * size_modifier);
+                        adjustCursorPos(ctx, 1, -10)
 
-                            obj_Selector(ctx, actualTrackIndex, track, obj_x, obj_y, colorValues.color30_selector, 3,
-                                colorValues.color31_selector_frame, 0, mouse, keys);
+                        -- In Between Channel Buttons
+                        obj_Channel_Button_InBetween(ctx, track, actualTrackIndex, i, mouse, patternItems, track_count,
+                            colorValues, mouse, keys)
+                        reaper.ImGui_SameLine(ctx, 0, 0);
+                        adjustCursorPos(ctx, -96, 0)
 
-                            -- Sequencer Buttons
-                            local note_positions, note_velocities, note_pitches = obj_Sequencer_Buttons(ctx, actualTrackIndex, mouse, keys,
-                                pattern_item, pattern_start, pattern_end, midi_item, note_positions, note_velocities,
-                                patternItems, colorValues, note_pitches)
+                        -- Channel Button
+                        obj_Channel_Button(ctx, track, actualTrackIndex, i, mouse, patternItems, track_count,
+                            colorValues, mouse, keys);
+                        reaper.ImGui_SameLine(ctx, 0, 0);
 
-                            if channel.GUID.expand.open[i] == 1 then
-                                if not channel.GUID.expand.spacing[i] then
-                                    channel.GUID.expand.spacing[i] = 200
-                                end
+                        obj_Selector(ctx, actualTrackIndex, track, obj_x, obj_y, colorValues.color30_selector, 3,
+                            colorValues.color31_selector_frame, 0, mouse, keys);
 
-                                if midi_item then
-                                    reaper.ImGui_Dummy(ctx, 162, 0)
-                                    reaper.ImGui_SameLine(ctx)
-                                    channel.GUID.expand.type[i] = obj_ExpandSelector(ctx, channel.GUID.expand.type[i], track, mouse, keys, channel.GUID[i])
-                                    reaper.ImGui_Dummy(ctx, 11, channel.GUID.expand.spacing[i])
-                                    reaper.ImGui_SameLine(ctx)
-                                    if channel.GUID.expand.type[i] == 'Velocity' then
-                                        adjustCursorPos(ctx, 3, -20)
-                                        obj_VelocitySliders(ctx, actualTrackIndex,
-                                        note_positions, note_velocities, mouse, keys, numberOfSliders, sliderWidth, channel.GUID.expand.spacing[i],
-                                        x_padding, patternItems, patternSelectSlider, colorValues)
-                                    end
-                                    if channel.GUID.expand.type[i] == 'Pitch' then
-                                        adjustCursorPos(ctx, 3, -20)
-                                        obj_PitchSliders(ctx, actualTrackIndex,
-                                        note_positions, note_pitches, mouse, keys, numberOfSliders, sliderWidth, channel.GUID.expand.spacing[i],
-                                        x_padding, patternItems, patternSelectSlider, colorValues)
-                                    end
-                                    if channel.GUID.expand.type[i] == 'Offset' then
-                                        adjustCursorPos(ctx, 3, -20)
-                                        obj_OffsetSliders(ctx, actualTrackIndex,
-                                        note_positions, note_pitches, mouse, keys, numberOfSliders, sliderWidth, channel.GUID.expand.spacing[i],
-                                        x_padding, patternItems, patternSelectSlider, colorValues)
-                                    end
-                                    
-                                    adjustCursorPos(ctx, 22, -28)
-                                    channel.GUID.expand.spacing[i] = obj_ExpandResize(ctx, channel.GUID.expand.spacing[i], i, mouse, keys, x)
-                                    reaper.ImGui_Dummy(ctx, 1, 1)
-                                    
+                        -- Sequencer Buttons
+                        local note_positions, note_velocities, note_pitches = obj_Sequencer_Buttons(ctx, actualTrackIndex,
+                            mouse, keys,
+                            pattern_item, pattern_start, pattern_end, midi_item, note_positions, note_velocities,
+                            patternItems, colorValues, note_pitches)
 
-                                end
+                        if channel.GUID.expand.open[i] == 1 then
+                            if not channel.GUID.expand.spacing[i] then
+                                channel.GUID.expand.spacing[i] = 200
                             end
 
+                            if midi_item then
+                                reaper.ImGui_Dummy(ctx, 163, 0)
+                                reaper.ImGui_SameLine(ctx)
+                                channel.GUID.expand.type[i] = obj_ExpandSelector(ctx, channel.GUID.expand.type[i], track,
+                                    mouse, keys, channel.GUID[i])
+                                -- obj_KnobMIDI(ctx, images.Knob_2, "##Offset" .. i, veloffset, params.knobVolume, mouse, keys)
+                                reaper.ImGui_Dummy(ctx, 11, channel.GUID.expand.spacing[i])
+                                reaper.ImGui_SameLine(ctx)
+                                if channel.GUID.expand.type[i] == 'Velocity' then
+                                    adjustCursorPos(ctx, 6, -20)
+                                    obj_VelocitySliders(ctx, actualTrackIndex,
+                                        note_positions, note_velocities, mouse, keys, numberOfSliders, sliderWidth,
+                                        channel.GUID.expand.spacing[i],
+                                        x_padding, patternItems, patternSelectSlider, colorValues)
+                                    -- reaper.ImGui_Button(ctx, 'Velocity', 10, 10)
+                                    -- reaper.ImGui_SameLine(ctx)
+                                end
+                                if channel.GUID.expand.type[i] == 'Pitch' then
+                                    adjustCursorPos(ctx, 6, -20)
+                                    obj_PitchSliders(ctx, actualTrackIndex,
+                                        note_positions, note_pitches, mouse, keys, numberOfSliders, sliderWidth,
+                                        channel.GUID.expand.spacing[i],
+                                        x_padding, patternItems, patternSelectSlider, colorValues)
+                                end
+                                if channel.GUID.expand.type[i] == 'Offset' then
+                                    adjustCursorPos(ctx, 6, -20)
+                                    obj_OffsetSliders(ctx, actualTrackIndex,
+                                        note_positions, note_pitches, mouse, keys, numberOfSliders, sliderWidth,
+                                        channel.GUID.expand.spacing[i],
+                                        x_padding, patternItems, patternSelectSlider, colorValues)
+                                end
 
-                            adjustCursorPos(ctx, -2, 0)
-                        else    
-                            reaper.ImGui_Dummy(ctx, 22, 34)
+                                adjustCursorPos(ctx, 25, -28)
+                                channel.GUID.expand.spacing[i] = obj_ExpandResize(ctx, channel.GUID.expand.spacing[i], i,
+                                    mouse, keys, x)
+                                adjustCursorPos(ctx, 0, 10)
+                                -- reaper.ImGui_Dummy(ctx, 1, 1)
+                            end
                         end
+
+                    else
+                        reaper.ImGui_Dummy(ctx, 22, 34)
+                    end
                 end;
 
                 if trackWasInserted then
@@ -5961,10 +6211,12 @@ function loop()
                     trackWasInserted = false
                 end
 
-                obj_Invisible_Channel_Button(track_suffix, ctx, count_tracks, colorValues, window_height)
-                seqScrollPos = reaper.ImGui_GetScrollX(ctx)
+                obj_Invisible_Channel_Button(track_suffix, ctx, track_count, colorValues, window_height)
+                -- seqScrollPos = reaper.ImGui_GetScrollX(ctx)
+                -- reaper.ImGui_EndChild(ctx)
             end
-            reaper.ImGui_Dummy(ctx, 1, 121)
+
+            reaper.ImGui_Dummy(ctx, 22, 51)
             reaper.ImGui_EndChild(ctx)
         end
 
@@ -5994,9 +6246,7 @@ function loop()
         --     reaper.SetExtState('McSequencer', 'sidebarResize', 0, 0)
         -- end
 
-
         reaper.ImGui_SameLine(ctx)
-
 
         adjustCursorPos(ctx, -10, -6)
         if reaper.ImGui_BeginChild(ctx, 'Sidebar', 8 + controlSidebarWidth * size_modifier, -1 * size_modifier, false, sidebarFlags) then
