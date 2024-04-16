@@ -1,13 +1,11 @@
 -- @description Arthur McArthur McSequencer
 -- @author Arthur McArthur
 -- @license GPL v3
--- @version 1.1.22
+-- @version 1.1.23
 -- @changelog
---  Sounds can now be dragged and dropped in between sequencer rows (thanks cfillon!)
---  Channel buttons will now be highlighed when sounds are dragged over them
---  Playcursor buttons will stay at the top of the window when vertically scrolling through the sequencer rows
---  Potential fix for pitch slider value misalignement
---  Some scrolling fixes
+--  - More scrolling fixes. Scrolling should be a much smoother experience. Much thanks to cfillon for the help
+--  - Extension check for sample cycling. Next, prev or random sample buttons will ignore non-audio files
+--  - Control click on slider expand button closes all of them
 -- @provides
 --   Modules/*.lua
 --   Images/*.png
@@ -16,7 +14,7 @@
 --   Fonts/*.ttc
 --   [effect] JSFX/*.jsfx
 
-local versionNumber = '1.1.22'
+local versionNumber = '1.1.23'
 local reaper = reaper
 local os = reaper.GetOS()
 
@@ -3170,7 +3168,6 @@ end
 
 ---- RS5K  ---------------------------------
 
-
 local function cycleRS5kSample(track, fxIndex, direction)
     local ret, currentFile = reaper.TrackFX_GetNamedConfigParm(track, fxIndex, "FILE0")
 
@@ -3191,9 +3188,16 @@ local function cycleRS5kSample(track, fxIndex, direction)
         if not fileName then
             break
         end
-        table.insert(files, fileName)
+
+        -- Check if the file is an audio file by its extension
+        if fileName:match("%.wav$") or fileName:match("%.mp3$") or fileName:match("%.flac$") or fileName:match("%.aiff$") or fileName:match("%.aac$") then
+            table.insert(files, fileName)
+        end
+
         i = i + 1
     end
+
+    if #files == 0 then return end  -- If no audio files, exit the function
 
     table.sort(files)
 
@@ -3235,6 +3239,7 @@ local function cycleRS5kSample(track, fxIndex, direction)
     reaper.TrackFX_SetNamedConfigParm(track, fxIndex, "FILE0", newFilePath)
     reaper.TrackFX_SetNamedConfigParm(track, fxIndex, "DONE", "")
 end
+
 
 local function last_tr_in_folder(folder_tr)
     local last = nil
@@ -5090,6 +5095,13 @@ local function obj_Expand(ctx, value, track, mouse, keys)
         value = is_active and 0 or 1 -- Toggle value between 0 and 1
     end
 
+    if keys.ctrlDown and reaper.ImGui_IsItemClicked(ctx) then
+        for key, value in pairs(channel.GUID.expand.open) do
+            channel.GUID.expand.open[key] = 0
+        end
+        -- value = 0
+    end
+
     if reaper.ImGui_IsItemHovered(ctx) then
         hoveredControlInfo.id = 'Expand Sliders'
     end
@@ -5285,15 +5297,25 @@ end
 
 local function obj_Invisible_Channel_Button(track_suffix, ctx, count_tracks, colorValues, window_height)
 
-    local x, y = reaper.ImGui_GetWindowContentRegionMax(ctx)
-    local xcur, ycur = reaper.ImGui_GetCursorPos(ctx)
+    local avail_w, avail_h = reaper.ImGui_GetContentRegionAvail(ctx)
+    reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Text(),
+        reaper.ImGui_GetStyleColor(ctx, reaper.ImGui_Col_TextDisabled()))
+    reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Button(), 0)
+    reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ButtonActive(), 0)
+    reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ButtonHovered(), 0)
+    reaper.ImGui_SetCursorPosX(ctx,  reaper.ImGui_GetCursorPosX(ctx) + reaper.ImGui_GetScrollX(ctx))
+    reaper.ImGui_Button(ctx, 'Drag files here to create tracks', avail_w, math.max(50, avail_h))
+    reaper.ImGui_PopStyleColor(ctx, 4)
 
-    if (y - ycur) ~= 0 then
-        reaper.ImGui_InvisibleButton(ctx, '##AreaBelowControls', x, (y - ycur ))
-        -- reaper.ImGui_Button(ctx, '##AreaBelowControls', x, (y - ycur ))
+    -- local x, y = reaper.ImGui_GetWindowContentRegionMax(ctx)
+    -- local xcur, ycur = reaper.ImGui_GetCursorPos(ctx)
+
+    -- if (y - ycur) ~= 0 then
+    --     reaper.ImGui_InvisibleButton(ctx, '##AreaBelowControls', x, (y - ycur ))
+    --     -- reaper.ImGui_Button(ctx, '##AreaBelowControls', x, (y - ycur ))
 
 
-    end
+    -- end
 
     if reaper.ImGui_BeginDragDropTarget(ctx) then
         local rv, count = reaper.ImGui_AcceptDragDropPayloadFiles(ctx)
@@ -6086,15 +6108,33 @@ function loop()
             --     print(seqScrollX)
             -- end
 
+            local expandedSliderSizes = {}
+            for i = 1, channel.channel_amount do
+                if channel.GUID.expand.open[i] == 1 then
+                    expandedSliderSizes[i] = channel.GUID.expand.spacing[i] or 200  -- Default size or specific expanded size
+                else
+                    expandedSliderSizes[i] = 0  -- No expansion
+                end
+            end
+        
+
             reaper.ImGui_Dummy(ctx, 0, 4)
 
 
             if channel and channel.channel_amount then
                 for i = 1, channel.channel_amount do
-                    local curx, cury = reaper.ImGui_GetCursorScreenPos(ctx)
+                    -- local curx, cury = reaper.ImGui_GetCursorScreenPos(ctx)
 
-                    local xthing = reaper.ImGui_GetContentRegionAvail(ctx)
-                    local visibleRow = reaper.ImGui_IsRectVisible(ctx, xthing, 32)
+                    -- print(channel.GUID.expand.spacing[i])
+
+                    -- local sliderSpacing
+
+                    local xRegionAvail = reaper.ImGui_GetContentRegionAvail(ctx)
+
+                    local heightWithSlider = 32 + expandedSliderSizes[i]  -- Add slider height to row height
+                    local visibleRow = reaper.ImGui_IsRectVisible(ctx, xRegionAvail, heightWithSlider)
+                    
+
                     if visibleRow then
                         local x, y = reaper.ImGui_GetWindowContentRegionMax(ctx)
                         local track = channel.GUID[i - 1]
@@ -6161,8 +6201,9 @@ function loop()
                             end
 
                             if midi_item then
-                                reaper.ImGui_Dummy(ctx, 163, 0)
-                                reaper.ImGui_SameLine(ctx)
+                                -- reaper.ImGui_Dummy(ctx, 163, 0)
+                                -- reaper.ImGu  i_SameLine(ctx)
+                                adjustCursorPos(ctx, 163, 0)
                                 channel.GUID.expand.type[i] = obj_ExpandSelector(ctx, channel.GUID.expand.type[i], track,
                                     mouse, keys, channel.GUID[i])
                                 -- obj_KnobMIDI(ctx, images.Knob_2, "##Offset" .. i, veloffset, params.knobVolume, mouse, keys)
@@ -6200,8 +6241,25 @@ function loop()
                             end
                         end
 
+                        -- if channel.GUID.expand.open[i] == 0 then
+                        --     channel.GUID.expand.spacing[i] = nil
+                        -- end
+
+                        
+                        -- print(totalSliderSpacing)
+                        
                     else
-                        reaper.ImGui_Dummy(ctx, 22, 34)
+                        
+                        
+                        -- local totalSliderSpacing = totalSliderSpacing or 0
+                        -- for k, v in pairs(channel.GUID.expand.spacing) do
+                        --     if v and totalSliderSpacing then 
+                        --         totalSliderSpacing = totalSliderSpacing + v
+                        --     end
+                        --     -- print(channel.GUID.expand.spacing[k])
+                        -- end
+                        
+                        reaper.ImGui_Dummy(ctx, xRegionAvail, heightWithSlider )
                     end
                 end;
 
@@ -6216,7 +6274,7 @@ function loop()
                 -- reaper.ImGui_EndChild(ctx)
             end
 
-            reaper.ImGui_Dummy(ctx, 22, 51)
+            -- reaper.ImGui_Dummy(ctx, 22, 51)
             reaper.ImGui_EndChild(ctx)
         end
 
