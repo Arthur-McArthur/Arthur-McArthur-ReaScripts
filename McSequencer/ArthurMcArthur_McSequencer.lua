@@ -1,15 +1,17 @@
 -- @description Arthur McArthur McSequencer
 -- @author Arthur McArthur
 -- @license GPL v3
--- @version 1.2.00
+-- @version 1.2.01
 -- @changelog
---  - Channels can be dragged to reorder them. Holding shift while draggin will reorder all selected tracks. Holding control while dragging will copy selected tracks
---  - Improvements to Mute and Solo buttons, making them more similar to REAPER's native buttons. They can be dragged on, ctrl-alt clicked for exclusive mute/solo and ctrl-clicked to clear all.
---  - Mousewheel will now scroll when mouse hovers the sequencer or other buttons, it will only be blocked when over top of the pan and volume knobs
---  - Waveform display improvements, will now handle mono files appropriately
---  - Fixed sequencer dragging not registering if the mouse went above the buttons
---  - Performance improvements to right click drag deleting
---  - Channel names will resize correctly to the button
+--  - Holding down alt while dragging a knob will change values across all selected tracks
+--  - Control-click on a channel button will preview the sample
+--  - Set item grouping on by default
+--  - Switching samples from the cycle and random buttons on the sidebar will change the track name
+--  - Display slider value numbers for velocity and offset
+--  - Mousewheel scroll will work on the sequencer while holding control
+--  - Mousewheel scrolling will be smoother and work when it should
+--  - Waveform view tweaks
+--  - Improved accuracy of inserting new items
 -- @provides
 --   Modules/*.lua
 --   Images/*.png
@@ -18,11 +20,9 @@
 --   Fonts/*.ttc
 --   [effect] JSFX/*.jsfx
 
-local versionNumber = '1.2.00'
+local versionNumber = '1.2.01'
 local reaper = reaper
 local os = reaper.GetOS()
-
-
 
 function GetFullProjectPath(proj) -- with projct Name. with .rpp at the end
     return reaper.GetProjectPathEx( proj ):gsub("(.*)\\.*$","%1")  .. reaper.GetProjectName(proj)
@@ -370,9 +370,9 @@ local layout = {
         bg_y = 29,
         sampleTitle_x = 14,
         sampleTitle_y = 6,
-        waveform_Sz_x = 188,
-        waveform_Sz_y = 48,
-        waveform_Of_x = 14,
+        waveform_Sz_x = 198,
+        waveform_Sz_y = 52,
+        waveform_Of_x = 9,
         waveform_Of_y = 6
     }
 }
@@ -601,7 +601,7 @@ local function shorten_name(name, track_suffix)
 
     -- Shorten long names by displaying the beginning and end of the name
     if #cleaned_name > 12 then
-        cleaned_name = cleaned_name:sub(1, 7) .. ".." .. cleaned_name:sub(-6) 
+        cleaned_name = cleaned_name:sub(1, 7) .. ".." .. cleaned_name:sub(-5) 
     end
 
     return cleaned_name
@@ -683,6 +683,39 @@ function translateNoteNumber(noteNumber)
     return noteNames[noteIndex] .. tostring(octave)
 end
 
+function removeFileExtension(filename)
+    -- Separate gsub calls for each file extension
+    filename = filename:gsub("%.wav$", "")
+    filename = filename:gsub("%.mp3$", "")
+    filename = filename:gsub("%.flac$", "")
+    filename = filename:gsub("%.aiff$", "")
+    filename = filename:gsub("%.aif$", "")
+    filename = filename:gsub("%.ogg$", "")
+    filename = filename:gsub("%.m4a$", "")
+    filename = filename:gsub("%.wma$", "")
+    filename = filename:gsub("%.alac$", "")
+    filename = filename:gsub("%.aac$", "")
+    filename = filename:gsub("%.opus$", "")
+    return filename
+end
+
+----- PARAMETER RELATED -----
+
+local function setParamOnSelectedTracks(fxIndex, paramIndex, paramValue, shouldSet)
+    if shouldSet then
+        local countTracks = reaper.CountSelectedTracks(0)
+        for i = 0, countTracks - 1 do
+            local track = reaper.GetSelectedTrack(0, i)
+            if paramIndex == "vol" then
+                reaper.SetMediaTrackInfo_Value(track, "D_VOL", paramValue)
+            elseif paramIndex == "pan" then
+                reaper.SetMediaTrackInfo_Value(track, "D_PAN", paramValue)
+            else
+                reaper.TrackFX_SetParam(track, fxIndex, paramIndex, paramValue)
+            end
+        end
+    end
+end
 
 ----- GENERIC GUI OBJECT CLASS -----
 
@@ -772,18 +805,24 @@ local function obj_Knob2(ctx, imageParams, id, value, params, mouse, keys, yOffs
     local rv = false
 
     -- Define the actual sensitivity based on key modifiers
-    local dragSensitivity = keys.ctrlShiftDown and params.dragFineSensitivity * 0.25 or
-        (keys.ctrlDown and params.dragFineSensitivity * 0.5 or (keys.shiftDown and params.dragFineSensitivity or params.dragSensitivity))
-    local wheelSensitivity = keys.ctrlShiftDown and params.wheelFineSensitivity * 0.25 or
-        (keys.ctrlDown and params.wheelFineSensitivity * 0.5 or (keys.shiftDown and params.wheelFineSensitivity or params.wheelSensitivity))
+    local dragSensitivity = (keys.ctrlShiftDown or keys.ctrlAltShiftDown) and params.dragFineSensitivity * 0.25 or
+        ((keys.ctrlDown or keys.ctrlAltDown) and params.dragFineSensitivity * 0.5 or
+        ((keys.shiftDown or keys.shiftAltDown) and params.dragFineSensitivity or
+        params.dragSensitivity))
+
+    local wheelSensitivity = (keys.ctrlShiftDown or keys.ctrlAltShiftDown) and params.wheelFineSensitivity * 0.25 or
+        ((keys.ctrlDown or keys.ctrlAltDown) and params.wheelFineSensitivity * 0.5 or
+        ((keys.shiftDown or keys.shiftAltDown) and params.wheelFineSensitivity or
+        params.wheelSensitivity))
+
     local overallSensitivity = 250
 
     -- Transform the value to a curved scale
-    if not value then 
-        update_requiered = true 
-        return 
+    if not value then
+        update_requiered = true
+        return
     end
-    
+
     local normalizedValue = (value - params.min) / (params.max - params.min)
     local curvedValue = normalizedValue ^ params.scaling
     -- Mouse drag logic
@@ -799,11 +838,11 @@ local function obj_Knob2(ctx, imageParams, id, value, params, mouse, keys, yOffs
         local factor = 300
         local change = delta * speed * (params.max - params.min) / factor
         local newValue = value + change
-    
+
         if params.applySnap and params.snapAmount and params.snapAmount > 0 then
             newValue = params.snapAmount * math.floor((newValue + params.snapAmount / 2) / params.snapAmount)
         end
-    
+
         return math.max(math.min(newValue, params.max), params.min)
     end
 
@@ -813,14 +852,12 @@ local function obj_Knob2(ctx, imageParams, id, value, params, mouse, keys, yOffs
     end
 
     if isActive then
-        
-
         if os == "Win64" then
             reaper.ImGui_SetMouseCursor(ctx, reaper.ImGui_MouseCursor_None())
             mouse_x, mouse_y = reaper.GetMousePosition()
             trackDeltaX = mouse_x - dragStartPos[id].x
-            trackDeltaY = mouse_y - dragStartPos[id].y    
-            if  reaper.JS_ReaScriptAPI_Version then
+            trackDeltaY = mouse_y - dragStartPos[id].y
+            if reaper.JS_ReaScriptAPI_Version then
                 reaper.JS_Mouse_SetPosition(dragStartPos[id].x, dragStartPos[id].y)
             end
         else
@@ -830,18 +867,17 @@ local function obj_Knob2(ctx, imageParams, id, value, params, mouse, keys, yOffs
 
         local delta = params.dragDirection == 'Horizontal' and trackDeltaX or -trackDeltaY
         if delta ~= 0.0 then
-            local fineControl = (keys.shiftDown or keys.ctrlDown or keys.ctrlShiftDown)
+            local fineControl = (keys.shiftDown or keys.ctrlDown or keys.ctrlShiftDown or keys.ctrlAltDown or keys.ctrlAltShiftDown or keys.shiftAltDown)
             local change = (delta * (params.max - params.min) / overallSensitivity) * dragSensitivity
             if params.applySnap and not fineControl then
                 value = updateValueSnapped(delta, dragSensitivity, params, false)
-
             else
                 value, curvedValue = updateValue(change, params, curvedValue, fineControl, delta)
             end
             rv = true
         end
     end
-    
+
     -- Mouse wheel logic
     if reaper.ImGui_IsItemHovered(ctx) and mouse.mousewheel_v ~= 0 then
         local fineControl = (keys.shiftDown or keys.ctrlDown or keys.ctrlShiftDown)
@@ -881,9 +917,6 @@ local function obj_Knob2(ctx, imageParams, id, value, params, mouse, keys, yOffs
     end
     return rv, value
 end
-
-
-
 
 ---- TRACK RELATED  ---------------------------------
 
@@ -1677,7 +1710,7 @@ local function insertMidiPooledItems(trackIndex, patternSelectSlider, patternIte
             local midiItemEnd = midiItemStart + reaper.GetMediaItemInfo_Value(item, "D_LENGTH")
 
             -- Check if the MIDI item overlaps with the pattern item
-            if midiItemStart < itemEnd and midiItemEnd > itemStart then
+            if nearlyEqual(midiItemStart, itemStart) and nearlyEqual(midiItemEnd, itemEnd) then
                 existingMidiItemFound = true
                 reaper.Main_OnCommand(40289, 0) -- unselect all items
 
@@ -1693,7 +1726,6 @@ local function insertMidiPooledItems(trackIndex, patternSelectSlider, patternIte
             reaper.SetOnlyTrackSelected(targetTrack)
             reaper.SetEditCurPos(itemStart, false, false)
             reaper.Main_OnCommand(41072, 0) -- paste item pooled
-
         end
     end
     reaper.SetEditCurPos(cursor_pos, false, false)
@@ -2295,18 +2327,28 @@ local function updateMidiNoteVelocity(step_num, velocity, midi_item, midi_take, 
 
     -- Use binary search algorithm to find the note event closest to the note_position within the tolerance range and update its velocity
     local function binarySearch(start, finish, note_position, tolerance)
+        local best_index = nil
+        local best_distance = tolerance + 1  -- Initialize with a value larger than tolerance
         while start <= finish do
             local mid = math.floor((start + finish) / 2)
             local note_start_time = noteData[mid].note_start_time
-            if math.abs(note_position - note_start_time) <= tolerance then
-                return mid
-            elseif note_start_time < note_position then
+            local distance = math.abs(note_position - note_start_time)
+            
+            if distance < best_distance then
+                best_distance = distance
+                best_index = mid
+                if distance == 0 then
+                    break  -- Perfect match found, exit loop
+                end
+            end
+            
+            if note_start_time < note_position then
                 start = mid + 1
             else
                 finish = mid - 1
             end
         end
-        return nil
+        return best_index
     end
 
     local index = binarySearch(0, num_events - 1, note_position, tolerance)
@@ -2316,10 +2358,10 @@ local function updateMidiNoteVelocity(step_num, velocity, midi_item, midi_take, 
     end
 
     -- Check if the MIDI take was modified before sorting
-    if reaper.MIDI_GetHash(midi_take, false, "") ~= reaper.MIDI_GetHash(midi_take, true, "") then
-        -- Update the MIDI take
-        reaper.MIDI_Sort(midi_take)
-    end
+    -- if reaper.MIDI_GetHash(midi_take, false, "") ~= reaper.MIDI_GetHash(midi_take, true, "") then
+    --     -- Update the MIDI take
+    --     reaper.MIDI_Sort(midi_take)
+    -- end
 end
 
 local function updateMidiNotePitch(step_num, pitch, midi_item, midi_take, num_events, pattern_start, step_duration, tolerance, noteData)
@@ -2467,13 +2509,17 @@ local function obj_VelocitySliders(ctx, trackIndex, note_positions, note_velocit
             draggingNow = true
             -- Calculate the current and previous slider indices based on mouse position
             local currentSliderIndex = math.floor((mouse.mouse_x - cursor_x) / sliderWidth)
+            -- print('currentSliderIndex: ' .. currentSliderIndex)
             local previousSliderIndex = math.floor((previous_mouse_x - cursor_x) / sliderWidth)
-            currentSliderIndex = math.max(0, math.min(currentSliderIndex, numberOfSliders - 1))
-            previousSliderIndex = math.max(0, math.min(previousSliderIndex, numberOfSliders - 1))
-
+            -- currentSliderIndex = math.max(0, math.min(currentSliderIndex, numberOfSliders - 1))
+            -- previousSliderIndex = math.max(0, math.min(previousSliderIndex, numberOfSliders - 1))
+            
             -- Determine the range of sliders to update
             local startIndex = math.min(currentSliderIndex, previousSliderIndex)
+            -- print('startIndex: ' .. startIndex)
             local endIndex = math.max(currentSliderIndex, previousSliderIndex)
+            -- print('endIndex: ' .. endIndex)
+            local midiUpdated = false
 
             -- Update sliders in the determined range
             for i = startIndex, endIndex do
@@ -2491,12 +2537,11 @@ local function obj_VelocitySliders(ctx, trackIndex, note_positions, note_velocit
                         closestNoteDistance = distance
                     end
                 end
-
-
                 -- print('st ' .. startIndex)
                 -- print('en ' .. endIndex)
                 if closestNoteIndex then
                     local valueToApply
+                    midiUpdated = true  -- Set flag if any note is updated
                     if startIndex ~= endIndex then
                         local relativePosition = (i - startIndex) / (endIndex - startIndex)
                         local interpolated_y = previous_mouse_y + (mouse.mouse_y - previous_mouse_y) * relativePosition
@@ -2516,6 +2561,10 @@ local function obj_VelocitySliders(ctx, trackIndex, note_positions, note_velocit
                         updateMidiNoteVelocity(i + 1, new_velocity, midi_item, midi_take, num_events, pattern_start,
                             step_duration, tolerance, noteData)
                     end
+                    
+                end
+                if midiUpdated then
+                    reaper.MIDI_Sort(midi_take)
                 end
             end
         else
@@ -2599,7 +2648,14 @@ local function obj_VelocitySliders(ctx, trackIndex, note_positions, note_velocit
         local numColorsPushed, rv, slider_left, slider_top, slider_right, slider_bottom = obj_RectSlider(
             ctx, slider_cursor_x, cursor_y, sliderWidth, sliderHeight, slider_value, drawList, x_padding, color,
             isNotePresent, colorValues)
+        
+        if slider_value then slider_value = math.floor(slider_value * 127) end
+        reaper.ImGui_PushFont(ctx, font_SliderValue)
+        reaper.ImGui_DrawList_AddText(drawList, slider_left + x_padding + 3, slider_bottom + 5, colorValues.color66_waveform,
+        slider_value)
+        reaper.ImGui_PopFont(ctx)
     end
+
 
     --Dummy Spacer
     reaper.ImGui_Dummy(ctx, 0, sliderHeight)
@@ -2816,7 +2872,7 @@ local function obj_PitchSliders(ctx, trackIndex, note_positions, note_pitches,
 
 
         reaper.ImGui_PushFont(ctx, font_SliderValue)
-        reaper.ImGui_DrawList_AddText(drawList, slider_left + x_padding, slider_bottom + 6, colorValues.color66_waveform,
+        reaper.ImGui_DrawList_AddText(drawList, slider_left + x_padding + 3, slider_bottom + 5, colorValues.color66_waveform,
             note_value)
         reaper.ImGui_PopFont(ctx)
     end
@@ -3038,6 +3094,14 @@ local function obj_OffsetSliders(ctx, trackIndex, note_positions, note_pitches,
         local numColorsPushed, rv, slider_left, slider_top, slider_right, slider_bottom = obj_RectSliderMiddle(
             ctx, slider_cursor_x, cursor_y, sliderWidth, sliderHeight, slider_value, drawList, x_padding, color,
             isNotePresent, colorValues)
+
+        if slider_value then 
+            slider_value = math.floor((slider_value - 0.5) * 200)
+        end
+        reaper.ImGui_PushFont(ctx, font_SliderValue)
+        reaper.ImGui_DrawList_AddText(drawList, slider_left + x_padding + 3, slider_bottom + 5, colorValues.color66_waveform,
+        slider_value)
+        reaper.ImGui_PopFont(ctx)
     end
 
     --Dummy Spacer
@@ -3282,6 +3346,18 @@ local function cycleRS5kSample(track, fxIndex, direction)
 
     reaper.TrackFX_SetNamedConfigParm(track, fxIndex, "FILE0", newFilePath)
     reaper.TrackFX_SetNamedConfigParm(track, fxIndex, "DONE", "")
+
+    local newFileName = files[newIndex]
+    if not newFileName then
+        return nil
+    end
+
+    local newFilePath = dirPath .. newFileName
+
+    reaper.TrackFX_SetNamedConfigParm(track, fxIndex, "FILE0", newFilePath)
+    reaper.TrackFX_SetNamedConfigParm(track, fxIndex, "DONE", "")
+
+    return newFileName  -- Return the name of the file
 end
 
 
@@ -3349,7 +3425,7 @@ local function insertNewTrack(filename, track_suffix, track_count, insertIndex)
         if new_track then
             -- Extract the name from the path and remove the .wav file extension
             local trackName = filename:match("^.+[\\/](.+)$")
-            trackName = trackName:gsub("%.wav$", "")
+            trackName = trackName:gsub("%.(wav|mp3|flac|aiff|aac|ogg|m4a)$", "")
             local trackExists = false
             local numTracks = reaper.CountTracks(0)
             for i = 0, numTracks - 1 do
@@ -3865,6 +3941,18 @@ local function obj_Channel_Button(ctx, track, actualTrackIndex, buttonIndex, mou
         reaper.SetTrackSelected(track, true)
         reaper.ImGui_OpenPopup(ctx, contextMenuID)
     end
+
+    
+    if keys.ctrlDown and reaper.ImGui_IsItemClicked(ctx, 0) then
+        if not sliderTriggered then
+            triggerSlider(true, track)
+            sliderTriggered = true
+            triggerTime = reaper.time_precise()
+        elseif sliderTriggered and (reaper.time_precise() - triggerTime) > triggerDuration then
+            triggerSlider(false)
+            sliderTriggered = false
+        end
+    end
     
     if reaper.ImGui_BeginPopup(ctx, contextMenuID, reaper.ImGui_WindowFlags_NoMove()) then
         obj_Channel_Button_Menu(ctx, actualTrackIndex, contextMenuID, patternItems, track_count)
@@ -4349,6 +4437,7 @@ end
 
 local function waveformDisplay(ctx, pcm, sample_path, keys, colorValues, mouse)
     local frame_w, frame_h = reaper.ImGui_GetContentRegionAvail(ctx)
+
     local duration = 0.2      -- Duration in seconds
 
     -- Determine the number of channels in the PCM source
@@ -4368,7 +4457,7 @@ local function waveformDisplay(ctx, pcm, sample_path, keys, colorValues, mouse)
             local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
             local x, y = reaper.ImGui_GetCursorScreenPos(ctx)
             if x ~= 0 then
-                reaper.ImGui_InvisibleButton(ctx, '##Waveform', frame_w, 100) -- Adjusted for a fixed height, modify as needed
+                reaper.ImGui_InvisibleButton(ctx, '##Waveform', frame_w, 100) 
             end
             local line_thickness = 1
 
@@ -4449,7 +4538,7 @@ local function obj_Control_Sidebar(ctx, keys, colorValues, mouse)
 
     local fxCount = reaper.TrackFX_GetCount(track)
     for fxIndex = 0, fxCount - 1 do
-        local _, fxName = reaper.TrackFX_GetFXName(track, fxIndex, "")
+        local _, fxName = reaper.TrackFX_GetFXName(track, fxIndex)
         if fxName:find("ReaSamplOmatic5000") or fxName:find("%(RS5K%)") then
             reaper.ImGui_DrawList_AddImage(drawList, images.Sidebar_bg.i, xcur + layout.Sidebar.bg_x, ycur + layout.Sidebar.bg_y, 
             xcur + images.Sidebar_bg.x + layout.Sidebar.bg_x, ycur + images.Sidebar_bg.y+ layout.Sidebar.bg_y)
@@ -4480,7 +4569,7 @@ local function obj_Control_Sidebar(ctx, keys, colorValues, mouse)
             local valueEnd, _, _ = reaper.TrackFX_GetParam(track, fxIndex, 14)
 
 
-            reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ChildBg(), colorValues.color70_transparent);
+            reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ChildBg(), colorValues.color70_transparent)
             if reaper.ImGui_BeginChild(ctx, 'Waveform', layout.Sidebar.waveform_Sz_x, layout.Sidebar.waveform_Sz_y, 0, reaper.ImGui_WindowFlags_NoScrollWithMouse() | reaper.ImGui_WindowFlags_NoScrollbar()) then
                 local selected_track = track
                 local selected_sample_path = sampleName
@@ -4508,7 +4597,6 @@ local function obj_Control_Sidebar(ctx, keys, colorValues, mouse)
 
                 if valueStart ~= 0 then
                     local curx, cury = reaper.ImGui_GetCursorScreenPos(ctx)
-                    -- local cury = cury - layout.Sidebar.waveform_Sz_y * 4
                     local valueLocation = curx + valueStart * (layout.Sidebar.waveform_Sz_x )
                     reaper.ImGui_DrawList_AddRectFilled(drawList, curx, cury, valueLocation, cury - 200, colorValues.color67_waveformShading)
                     reaper.ImGui_DrawList_AddLine(drawList, valueLocation, cury, valueLocation, cury - 200, 28952562, 1)
@@ -4516,7 +4604,6 @@ local function obj_Control_Sidebar(ctx, keys, colorValues, mouse)
 
                 if valueEnd ~= 1 then
                     local curx, cury = reaper.ImGui_GetCursorScreenPos(ctx)
-                    -- local cury = cury - layout.Sidebar.waveform_Sz_y * 4
                     local valueLocation = curx + valueEnd * (layout.Sidebar.waveform_Sz_x )
                     reaper.ImGui_DrawList_AddRectFilled(drawList, curx + layout.Sidebar.waveform_Sz_x , cury, valueLocation, cury - 200, colorValues.color67_waveformShading)
                     reaper.ImGui_DrawList_AddLine(drawList, valueLocation, cury, valueLocation, cury - 200, 28952562, 1)
@@ -4545,7 +4632,9 @@ local function obj_Control_Sidebar(ctx, keys, colorValues, mouse)
             reaper.ImGui_Image(ctx, btnimg[1] , images.Prev_Sample.x, images.Prev_Sample.y)  -- Adjust position as needed
             if reaper.ImGui_IsItemClicked(ctx) then
                 isClicked[1] = true  -- Set the state to true for flashing
-                cycleRS5kSample(track, fxIndex, "previous")  -- Your function call
+                local newName = cycleRS5kSample(track, fxIndex, "previous")  -- Your function call
+                newName = removeFileExtension(newName)
+                reaper.GetSetMediaTrackInfo_String(track, "P_NAME", newName .. track_suffix, true) -- Change track name on click
             end
             if reaper.ImGui_IsItemHovered(ctx) then
                 hoveredControlInfo.id = 'Previous Sample'
@@ -4559,7 +4648,9 @@ local function obj_Control_Sidebar(ctx, keys, colorValues, mouse)
             reaper.ImGui_Image(ctx, btnimg[2] , images.Rnd_Sample.x, images.Rnd_Sample.y)  -- Adjust position as needed
             if reaper.ImGui_IsItemClicked(ctx) then
                 isClicked[2]= true  -- Set the state to true for flashing
-                cycleRS5kSample(track, fxIndex, "random")  -- Your function call
+                newName = cycleRS5kSample(track, fxIndex, "random")  -- Your function call
+                newName = removeFileExtension(newName)
+                reaper.GetSetMediaTrackInfo_String(track, "P_NAME", newName .. track_suffix, true) -- Change track name on click
             end
             if reaper.ImGui_IsItemHovered(ctx) then
                 hoveredControlInfo.id = 'Random Sample'
@@ -4573,7 +4664,9 @@ local function obj_Control_Sidebar(ctx, keys, colorValues, mouse)
             reaper.ImGui_Image(ctx, btnimg[3], images.Next_Sample.x, images.Next_Sample.y)  -- Adjust position as needed
             if reaper.ImGui_IsItemClicked(ctx) then
                 isClicked[3]= true  -- Set the state to true for flashing
-                cycleRS5kSample(track, fxIndex, "next")  -- Your function call
+                newName = cycleRS5kSample(track, fxIndex, "next")  -- Your function call
+                newName = removeFileExtension(newName)
+                reaper.GetSetMediaTrackInfo_String(track, "P_NAME", newName .. track_suffix, true) -- Change track name on click
             end
             if reaper.ImGui_IsItemHovered(ctx) then
                 hoveredControlInfo.id = 'Next Sample'
@@ -4634,36 +4727,53 @@ local function obj_Control_Sidebar(ctx, keys, colorValues, mouse)
 
             -- Sampler Controls
             -- Volume knob
-            _, channel.GUID.volume[selectedButtonIndex] = obj_Knob2(ctx, images.Knob_2, "##Volume",
-                channel.GUID.volume[selectedButtonIndex], params.knobVolume, mouse, keys)
+            -- _, channel.GUID.volume[selectedButtonIndex] = obj_Knob2(ctx, images.Knob_2, "##Volume",
+            --     channel.GUID.volume[selectedButtonIndex], params.knobVolume, mouse, keys)
+
+            local valueVolume = reaper.GetMediaTrackInfo_Value(track, "D_VOL")
+            local rvv, valueVolume = obj_Knob2(ctx, images.Knob_2, "##Volume", valueVolume, params.knobVolume, mouse,
+                keys)
+            setParamOnSelectedTracks(fxIndex, "vol", valueVolume, rvv and (keys.altDown or keys.shiftAltDown or keys.ctrlAltDown or keys.ctrlAltShiftDown))
+            if rvv and not keys.altDown then
+                reaper.SetMediaTrackInfo_Value(track, "D_VOL", valueVolume)
+            end
             reaper.ImGui_SameLine(ctx)
 
             -- Pan knob
-            _, channel.GUID.pan[selectedButtonIndex] = obj_Knob2(ctx, images.Knob_Pan, "##Pan",
-                channel.GUID.pan[selectedButtonIndex], params.knobPan, mouse, keys)
+            -- _, channel.GUID.pan[selectedButtonIndex] = obj_Knob2(ctx, images.Knob_Pan, "##Pan",
+            --     channel.GUID.pan[selectedButtonIndex], params.knobPan, mouse, keys)
+            local valuePan = reaper.GetMediaTrackInfo_Value(track, "D_PAN")
+            local rvp, valuePan = obj_Knob2(ctx, images.Knob_Pan, "##Pan", valuePan, params.knobPan, mouse,
+                keys)
+            setParamOnSelectedTracks(fxIndex, "pan", valuePan, rvp and (keys.altDown or keys.shiftAltDown or keys.ctrlAltDown or keys.ctrlAltShiftDown))
+            if rvp and not keys.altDown then
+                reaper.SetMediaTrackInfo_Value(track, "D_PAN", valuePan)
+            end
             reaper.ImGui_SameLine(ctx)
 
             -- Boost knob
             local valueBoost, _, _ = reaper.TrackFX_GetParam(track, fxIndex, 0)
             local rvb, valueBoost = obj_Knob2(ctx, images.Knob_2, "##Boost (Volume)", valueBoost, params.knobBoost, mouse,
                 keys)
-            if rvb then
+            setParamOnSelectedTracks(fxIndex, 0, valueBoost, rvb and (keys.altDown or keys.shiftAltDown or keys.ctrlAltDown or keys.ctrlAltShiftDown))
+            if rvb and not keys.altDown then
                 reaper.TrackFX_SetParam(track, fxIndex, 0, valueBoost)
             end
             reaper.ImGui_SameLine(ctx)
 
             -- Start knob
-            -- local valueStart, _, _ = reaper.TrackFX_GetParam(track, fxIndex, 13)
             local rvs, valueStart = obj_Knob2(ctx, images.Knob_Teal, "##Sample Start", valueStart, params.knobStart, mouse,
                 keys)
-            if rvs then
+            setParamOnSelectedTracks(fxIndex, 13, valueStart, rvs and (keys.altDown or keys.shiftAltDown or keys.ctrlAltDown or keys.ctrlAltShiftDown))
+            if rvs and not keys.altDown then
                 reaper.TrackFX_SetParam(track, fxIndex, 13, valueStart)
             end
             reaper.ImGui_SameLine(ctx)
 
             -- End knob
             local rve, valueEnd = obj_Knob2(ctx, images.Knob_Teal, "##Sample End", valueEnd, params.knobEnd, mouse, keys)
-            if rve then
+            setParamOnSelectedTracks(fxIndex, 14, valueEnd, rve and (keys.altDown or keys.shiftAltDown or keys.ctrlAltDown or keys.ctrlAltShiftDown))
+            if rve and not keys.altDown then
                 reaper.TrackFX_SetParam(track, fxIndex, 14, valueEnd)
             end
             adjustCursorPos(ctx, 44, 28)
@@ -4672,8 +4782,8 @@ local function obj_Control_Sidebar(ctx, keys, colorValues, mouse)
             -- Pitch Slider
             valuePitch, _, _ = reaper.TrackFX_GetParam(track, fxIndex, 15)
             local rvp, valuePitch = obj_Knob2(ctx, images.Slider_Pitch, "##Pitch" , valuePitch, params.sliderPitch, mouse, keys)
-
-            if rvp then
+            setParamOnSelectedTracks(fxIndex, 15, valuePitch, rvp and (keys.altDown or keys.shiftAltDown or keys.ctrlAltDown or keys.ctrlAltShiftDown))
+            if rvp and not keys.altDown then
                 reaper.TrackFX_SetParam(track, fxIndex, 15, valuePitch)
             end
 
@@ -4695,14 +4805,17 @@ local function obj_Control_Sidebar(ctx, keys, colorValues, mouse)
 
             -- Pitch Minus 12
             adjustCursorPos(ctx, 45, 6)
-            btnimg[7]  = isClicked[7] and images.Minus12_on.i or images.Minus12.i
-            isClicked[7]= false
-            reaper.ImGui_Image(ctx, btnimg[7], images.Minus12.x, images.Minus12.y)  -- Adjust position as needed
+            btnimg[7] = isClicked[7] and images.Minus12_on.i or images.Minus12.i
+            isClicked[7] = false
+            reaper.ImGui_Image(ctx, btnimg[7], images.Minus12.x, images.Minus12.y)
             if reaper.ImGui_IsItemClicked(ctx) then
-                isClicked[7]= true  -- Set the state to true for flashing
+                isClicked[7] = true
                 valuePitch = valuePitch - (12 / 160)
-                valuePitch = math.max(valuePitch, .2) -- Ensure the value does not go below min limit
-                reaper.TrackFX_SetParam(track, fxIndex, 15, valuePitch)
+                valuePitch = math.max(valuePitch, .2)
+                setParamOnSelectedTracks(fxIndex, 15, valuePitch, keys.altDown or keys.shiftAltDown or keys.ctrlAltDown or keys.ctrlAltShiftDown)
+                if not keys.altDown then
+                    reaper.TrackFX_SetParam(track, fxIndex, 15, valuePitch)
+                end
             end
             if reaper.ImGui_IsItemHovered(ctx) then
                 hoveredControlInfo.id = 'Pitch -12'
@@ -4711,14 +4824,17 @@ local function obj_Control_Sidebar(ctx, keys, colorValues, mouse)
             adjustCursorPos(ctx, -8, 0)
 
             -- Pitch Minus 1
-            btnimg[8]  = isClicked[8] and images.Minus1_on.i or images.Minus1.i
-            isClicked[8]= false
-            reaper.ImGui_Image(ctx, btnimg[8], images.Minus1.x, images.Minus1.y)  -- Adjust position as needed
+            btnimg[8] = isClicked[8] and images.Minus1_on.i or images.Minus1.i
+            isClicked[8] = false
+            reaper.ImGui_Image(ctx, btnimg[8], images.Minus1.x, images.Minus1.y)
             if reaper.ImGui_IsItemClicked(ctx) then
-                isClicked[8]= true  -- Set the state to true for flashing
+                isClicked[8] = true
                 valuePitch = valuePitch - (1 / 160)
-                valuePitch = math.max(valuePitch, .2) -- Ensure the value does not go below min limit
-                reaper.TrackFX_SetParam(track, fxIndex, 15, valuePitch)
+                valuePitch = math.max(valuePitch, .2)
+                setParamOnSelectedTracks(fxIndex, 15, valuePitch, keys.altDown or keys.shiftAltDown or keys.ctrlAltDown or keys.ctrlAltShiftDown)
+                if not keys.altDown then
+                    reaper.TrackFX_SetParam(track, fxIndex, 15, valuePitch)
+                end
             end
             if reaper.ImGui_IsItemHovered(ctx) then
                 hoveredControlInfo.id = 'Pitch -1'
@@ -4727,34 +4843,42 @@ local function obj_Control_Sidebar(ctx, keys, colorValues, mouse)
             adjustCursorPos(ctx, -8, 0)
 
             -- Pitch Randomization
-            btnimg[9]  = isClicked[9] and images.Rnd_Sample_Sidebar_on.i or images.Rnd_Sample_Sidebar.i
-            isClicked[9]= false
-            reaper.ImGui_Image(ctx, btnimg[9], images.Rnd_Sample_Sidebar_on.x, images.Rnd_Sample_Sidebar.y)  -- Adjust position as needed
+            btnimg[9] = isClicked[9] and images.Rnd_Sample_Sidebar_on.i or images.Rnd_Sample_Sidebar.i
+            isClicked[9] = false
+            reaper.ImGui_Image(ctx, btnimg[9], images.Rnd_Sample_Sidebar_on.x, images.Rnd_Sample_Sidebar.y)
             if reaper.ImGui_IsItemClicked(ctx) then
-                isClicked[9]= true  -- Set the state to true for flashing
+                isClicked[9] = true
                 valueSnap = 0.480 + math.random() * 0.03
-                reaper.TrackFX_SetParam(track, fxIndex, 15, valueSnap)
+                setParamOnSelectedTracks(fxIndex, 15, valueSnap, keys.altDown or keys.shiftAltDown or keys.ctrlAltDown or keys.ctrlAltShiftDown)
+                if not (keys.altDown or keys.shiftAltDown or keys.ctrlAltDown or keys.ctrlAltShiftDown) then
+                    reaper.TrackFX_SetParam(track, fxIndex, 15, valueSnap)
+                end
             end
-
             if reaper.ImGui_IsItemClicked(ctx, 1) then
                 valueSnap = 0.4 + math.random() * 0.2
-                reaper.TrackFX_SetParam(track, fxIndex, 15, valueSnap)
+                setParamOnSelectedTracks(fxIndex, 15, valueSnap, keys.altDown or keys.shiftAltDown or keys.ctrlAltDown or keys.ctrlAltShiftDown)
+                if not keys.altDown then
+                    reaper.TrackFX_SetParam(track, fxIndex, 15, valueSnap)
+                end
             end
             if reaper.ImGui_IsItemHovered(ctx) then
-                hoveredControlInfo.id = 'Randomzie Pitch, right click for greater range'
+                hoveredControlInfo.id = 'Randomize Pitch, right click for greater range'
             end
             reaper.ImGui_SameLine(ctx)
             adjustCursorPos(ctx, -8, 0)
 
             -- Pitch Plus 1
-            btnimg[10]  = isClicked[10] and images.Plus1_on.i or images.Plus1.i
-            isClicked[10]= false
-            reaper.ImGui_Image(ctx, btnimg[10], images.Plus1_on.x, images.Plus1_on.y)  -- Adjust position as needed
+            btnimg[10] = isClicked[10] and images.Plus1_on.i or images.Plus1.i
+            isClicked[10] = false
+            reaper.ImGui_Image(ctx, btnimg[10], images.Plus1_on.x, images.Plus1_on.y)
             if reaper.ImGui_IsItemClicked(ctx) then
-                isClicked[10]= true  -- Set the state to true for flashing
+                isClicked[10] = true
                 valuePitch = valuePitch + (1 / 160)
-                valuePitch = math.max(valuePitch, .2) -- Ensure the value does not go below min limit
-                reaper.TrackFX_SetParam(track, fxIndex, 15, valuePitch)
+                valuePitch = math.max(valuePitch, .2)
+                setParamOnSelectedTracks(fxIndex, 15, valuePitch, keys.altDown or keys.shiftAltDown or keys.ctrlAltDown or keys.ctrlAltShiftDown)
+                if not keys.altDown then
+                    reaper.TrackFX_SetParam(track, fxIndex, 15, valuePitch)
+                end
             end
             if reaper.ImGui_IsItemHovered(ctx) then
                 hoveredControlInfo.id = 'Pitch +1'
@@ -4763,14 +4887,17 @@ local function obj_Control_Sidebar(ctx, keys, colorValues, mouse)
             adjustCursorPos(ctx, -8, 0)
 
             -- Pitch Plus 12
-            btnimg[11]  = isClicked[11] and images.Plus12_on.i or images.Plus12.i
-            isClicked[11]= false
-            reaper.ImGui_Image(ctx, btnimg[11], images.Plus12_on.x, images.Plus12_on.y)  -- Adjust position as needed
+            btnimg[11] = isClicked[11] and images.Plus12_on.i or images.Plus12.i
+            isClicked[11] = false
+            reaper.ImGui_Image(ctx, btnimg[11], images.Plus12_on.x, images.Plus12_on.y)
             if reaper.ImGui_IsItemClicked(ctx) then
-                isClicked[11]= true  -- Set the state to true for flashing
+                isClicked[11] = true
                 valuePitch = valuePitch + (12 / 160)
-                valuePitch = math.max(valuePitch, .2) -- Ensure the value does not go below min limit
-                reaper.TrackFX_SetParam(track, fxIndex, 15, valuePitch)
+                valuePitch = math.max(valuePitch, .2)
+                setParamOnSelectedTracks(fxIndex, 15, valuePitch, keys.altDown or keys.shiftAltDown or keys.ctrlAltDown or keys.ctrlAltShiftDown)
+                if not keys.altDown then
+                    reaper.TrackFX_SetParam(track, fxIndex, 15, valuePitch)
+                end
             end
             if reaper.ImGui_IsItemHovered(ctx) then
                 hoveredControlInfo.id = 'Pitch +12'
@@ -4782,7 +4909,8 @@ local function obj_Control_Sidebar(ctx, keys, colorValues, mouse)
             -- -- Attack knob
             local valueAttack, _, _ = reaper.TrackFX_GetParam(track, fxIndex, 9)
             local rvatk, valueAttack = obj_Knob2(ctx, images.Knob_Teal, "Attack", valueAttack, params.knobAttack, mouse, keys)
-            if rvatk == true then
+            setParamOnSelectedTracks(fxIndex, 9, valueAttack, rvatk and (keys.altDown or keys.shiftAltDown or keys.ctrlAltDown or keys.ctrlAltShiftDown))
+            if rvatk and not keys.altDown then
                 reaper.TrackFX_SetParam(track, fxIndex, 9, valueAttack)
             end
             reaper.ImGui_SameLine(ctx, 51)
@@ -4790,7 +4918,8 @@ local function obj_Control_Sidebar(ctx, keys, colorValues, mouse)
             -- -- Decay knob
             local valueDecay, _, _ = reaper.TrackFX_GetParam(track, fxIndex, 24)
             local rvdcy, valueDecay = obj_Knob2(ctx, images.Knob_Teal, "Decay", valueDecay, params.knobDecay, mouse, keys)
-            if rvdcy == true then
+            setParamOnSelectedTracks(fxIndex, 24, valueDecay, rvdcy and (keys.altDown or keys.shiftAltDown or keys.ctrlAltDown or keys.ctrlAltShiftDown))
+            if rvdcy and not keys.altDown then
                 reaper.TrackFX_SetParam(track, fxIndex, 24, valueDecay)
             end
             reaper.ImGui_SameLine(ctx, 93)
@@ -4798,17 +4927,21 @@ local function obj_Control_Sidebar(ctx, keys, colorValues, mouse)
             -- Sustain knob
             local valueSustain, _, _ = reaper.TrackFX_GetParam(track, fxIndex, 25)
             local rvsus, valueSustain = obj_Knob2(ctx, images.Knob_Teal, "Sustain", valueSustain, params.knobSustain, mouse, keys)
-            if rvsus == true then
+            setParamOnSelectedTracks(fxIndex, 25, valueSustain, rvsus and (keys.altDown or keys.shiftAltDown or keys.ctrlAltDown or keys.ctrlAltShiftDown))
+            if rvsus and not keys.altDown then
                 reaper.TrackFX_SetParam(track, fxIndex, 25, valueSustain)
             end
+
             reaper.ImGui_SameLine(ctx, 135)
 
             -- -- Release knob
             valueRelease, _, _ = reaper.TrackFX_GetParam(track, fxIndex, 10)
             local rvrel, valueRelease = obj_Knob2(ctx, images.Knob_Teal, "Release", valueRelease, params.knobRelease, mouse, keys)
-            if rvrel == true then
+            setParamOnSelectedTracks(fxIndex, 10, valueRelease, rvrel and (keys.altDown or keys.shiftAltDown or keys.ctrlAltDown or keys.ctrlAltShiftDown))
+            if rvrel and not keys.altDown then
                 reaper.TrackFX_SetParam(track, fxIndex, 10, valueRelease)
             end
+
             -- reaper.ImGui_SameLine(ctx, 153 * size_modifier)
 
             -- Note Off Button
@@ -4839,19 +4972,21 @@ local function obj_Control_Sidebar(ctx, keys, colorValues, mouse)
             local _, fxName = reaper.TrackFX_GetFXName(track, fxIndex, "")
             if fxName:find("Swing") then
                 adjustCursorPos(ctx, 9, 16)
-
+    
                 -- Offset knob
                 local valueOffset, _, _ = reaper.TrackFX_GetParam(track, fxIndex, 16)
                 local rvofs, valueOffset = obj_Knob2(ctx, images.Knob_Yellow, "Offset", valueOffset, params.knobOffset, mouse, keys)
-                if rvofs == true then
+                setParamOnSelectedTracks(fxIndex, 16, valueOffset, rvofs and (keys.altDown or keys.shiftAltDown or keys.ctrlAltDown or keys.ctrlAltShiftDown))
+                if rvofs and not keys.altDown then
                     reaper.TrackFX_SetParam(track, fxIndex, 16, valueOffset)
                 end
                 reaper.ImGui_SameLine(ctx, nil, 9)
-
+    
                 -- Swing knob
                 valueSwing, _, _ = reaper.TrackFX_GetParam(track, fxIndex, 1)
                 local rvswg, valueSwing = obj_Knob2(ctx, images.Knob_Yellow, "Swing", valueSwing, params.knobSwing, mouse, keys)
-                if rvswg == true then
+                setParamOnSelectedTracks(fxIndex, 1, valueSwing, rvswg and (keys.altDown or keys.shiftAltDown or keys.ctrlAltDown or keys.ctrlAltShiftDown))
+                if rvswg and not keys.altDown then
                     reaper.TrackFX_SetParam(track, fxIndex, 1, valueSwing)
                 end
             end
@@ -5620,7 +5755,7 @@ local function obj_Invisible_Channel_Button(track_suffix, ctx, count_tracks, col
     reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ButtonActive(), 0)
     reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ButtonHovered(), 0)
     reaper.ImGui_SetCursorPosX(ctx,  reaper.ImGui_GetCursorPosX(ctx) + reaper.ImGui_GetScrollX(ctx))
-    reaper.ImGui_Button(ctx, 'Drag files here to create tracks', avail_w, math.max(50, avail_h))
+    reaper.ImGui_Button(ctx, 'Drag files here to create tracks', avail_w, math.max(50, avail_h) - 18)
     reaper.ImGui_PopStyleColor(ctx, 4)
 
     if reaper.ImGui_BeginDragDropTarget(ctx) then
@@ -5783,20 +5918,22 @@ local function obj_Selector(ctx, trackIndex, track, width, height, color, border
     end
 
     if active_lane == nil and anyMenuOpen == false and dragStartedOnAnySelector == true then
-        local drag_area_top = math.min(mouse.drag_start_y, mouse.mouse_y)
-        local drag_area_bottom = math.max(mouse.drag_start_y, mouse.mouse_y)
+        if mouse.drag_start_y and mouse.mouse_y then
+            local drag_area_top = math.min(mouse.drag_start_y, mouse.mouse_y)
+            local drag_area_bottom = math.max(mouse.drag_start_y, mouse.mouse_y)
 
-        -- Check if the button intersects with the drag area
-        local intersect = drag_area_top <= button_bottom and drag_area_bottom >= button_top
+            -- Check if the button intersects with the drag area
+            local intersect = drag_area_top <= button_bottom and drag_area_bottom >= button_top
 
-        -- print('intersect: ' .. tostring(intersect))
+            -- print('intersect: ' .. tostring(intersect))
 
-        -- Select or deselect the track based on the intersection
-        if intersect then
-            reaper.SetTrackSelected(track, true)
-        else
-            if not (keys.ctrlDown or keys.shiftDown) then
-                reaper.SetTrackSelected(track, false)
+            -- Select or deselect the track based on the intersection
+            if intersect then
+                reaper.SetTrackSelected(track, true)
+            else
+                if not (keys.ctrlDown or keys.shiftDown) then
+                    reaper.SetTrackSelected(track, false)
+                end
             end
         end
     end
@@ -6203,8 +6340,23 @@ local function obj_HoveredInfo(ctx, hoveredControlInfo)
     reaper.ImGui_Text(ctx, displayText)
 end
 
+local function setItemGrouping()
+    -- Define the command ID for the action
+    local commandID = 1156 -- Options: Toggle item grouping and track media/razor edit grouping
+
+    -- Get the toggle state of the action
+    local state = reaper.GetToggleCommandState(commandID)
+
+    -- Check if the action is toggled off
+    if state == 0 then
+        -- Toggle the action on
+        reaper.Main_OnCommand(commandID, 0)
+    end
+end
+
 ----- MAIN --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+setItemGrouping()
 SetButtonState(1)
 reaper.atexit(Exit)
 reaper.Undo_BeginBlock()
@@ -6266,6 +6418,7 @@ function loop()
     if visible then
          track_count = reaper.CountTracks(0)
         local patternItems, patternTrackIndex, patternTrack, maxPatternNumber = getPatternItems(track_count)
+        
         local mouse = mouseTrack(ctx)
         local keys = keyboard_shortcuts(ctx, patternItems, maxPatternNumber)
         local channel = update(ctx, track_count, track_suffix, channel)
@@ -6380,14 +6533,14 @@ function loop()
             -- adjustCursorPos(ctx, 0, -18)
 
             -- Volume Knob
-            _, parent.GUID.volume[0] = obj_Knob2(ctx, images.Knob_2, "##ParentVolume", parent.GUID.volume[0],
+            _, parent.GUID.volume[0] = obj_Knob2(ctx, images.Knob_2, "##Volume", parent.GUID.volume[0],
                 params.knobVolume, mouse, keys)
 
             reaper.ImGui_SameLine(ctx, 0, 5 * size_modifier);
             -- if size_modifier >= 1.3 then adjustCursorPos(ctx, 0, 2 * size_modifier) end
 
             -- Pan Knob
-            _, parent.GUID.pan[0] = obj_Knob2(ctx, images.Knob_Pan, "##Panparent", parent.GUID.pan[0], params.knobPan,
+            _, parent.GUID.pan[0] = obj_Knob2(ctx, images.Knob_Pan, '##Pan', parent.GUID.pan[0], params.knobPan,
                 mouse, keys)
             reaper.ImGui_SameLine(ctx, 0, 2 * size_modifier);
             -- adjustCursorPos(ctx, 0, -9)
@@ -6463,14 +6616,14 @@ function loop()
         local firstCursorX, firstCursorY = reaper.ImGui_GetCursorScreenPos(ctx)
 
 
-        if itemBlockScroll == true then
+        -- if itemBlockScroll == true then
 
-        sequencerFlags = reaper.ImGui_WindowFlags_NoScrollWithMouse() |
-                reaper.ImGui_WindowFlags_HorizontalScrollbar()
+            sequencerFlags = reaper.ImGui_WindowFlags_NoScrollWithMouse() |
+                    reaper.ImGui_WindowFlags_HorizontalScrollbar()
 
-        else
-            sequencerFlags = reaper.ImGui_WindowFlags_HorizontalScrollbar()
-        end
+        -- else
+        --     sequencerFlags = reaper.ImGui_WindowFlags_HorizontalScrollbar()
+        -- end
         
         
         
@@ -6481,7 +6634,9 @@ function loop()
             --     reaper.SetExtState("McSequencer", "ScrollX", tostring(seqScrollX), true)
             --     print(seqScrollX)
             -- end
-            
+
+            local isHovered = reaper.ImGui_IsWindowHovered(ctx, reaper.ImGui_HoveredFlags_ChildWindows())
+
             
             for i = 1, channel.channel_amount do
                 if channel.GUID.expand.open[i] == 1 then
@@ -6497,26 +6652,28 @@ function loop()
 
             if channel and channel.channel_amount then
                 for i = 1, channel.channel_amount do
-                    -- local curx, cury = reaper.ImGui_GetCursorScreenPos(ctx)
-
-                    -- print(channel.GUID.expand.spacing[i])
-
-                    -- local sliderSpacing
 
                     local xRegionAvail = reaper.ImGui_GetContentRegionAvail(ctx)
-                    -- print(xRegionAvail)
-
                     local heightWithSlider = 32 + expandedSliderSizes[i]  -- Add slider height to row height
                     local visibleRow = reaper.ImGui_IsRectVisible(ctx, xRegionAvail, heightWithSlider)
                     
-
                     if visibleRow then
                         local x, y = reaper.ImGui_GetWindowContentRegionMax(ctx)
                         local track = channel.GUID[i - 1]
+                        if not track then return end
                         local actualTrackIndex = channel.GUID.trackIndex[i];
                         local pattern_item, pattern_start, pattern_end, midi_item = getSelectedPatternItemAndMidiItem(
                             actualTrackIndex, patternItems, patternSelectSlider)
                         local note_positions, note_velocities, note_pitches = populateNotePositions(midi_item)
+
+ 
+                        -- enable mousehweel scroll while holding control
+                        if isHovered and mouse.mousewheel_v and itemBlockScroll == false and  draggingNow ~= true and active_lane == nil then
+                            local scrollY = reaper.ImGui_GetScrollY(ctx)
+                            -- reaper.ImGui_SetScrollY(ctx, scrollY - mouse.mousewheel_v * 65)
+                            reaper.ImGui_SetScrollY(ctx, scrollY - mouse.mousewheel_v * 36)
+
+                        end
 
                         reaper.ImGui_Dummy(ctx, 0, 0)
                         reaper.ImGui_SameLine(ctx, 0, 4 * size_modifier);
@@ -6542,14 +6699,30 @@ function loop()
                         if size_modifier >= 1.3 then adjustCursorPos(ctx, 0, 2 * size_modifier) end
 
                         -- Volume Knob
-                        _, channel.GUID.volume[i] = obj_Knob2(ctx, images.Knob_2, "##Volume" .. i,
-                            channel.GUID.volume[i], params.knobVolume, mouse, keys)
+                        -- _, channel.GUID.volume[i] = obj_Knob2(ctx, images.Knob_2, "##Volume" .. i,
+                        --     channel.GUID.volume[i], params.knobVolume, mouse, keys)
+
+                        local valueVolume = reaper.GetMediaTrackInfo_Value(track, "D_VOL")
+                        local rvv, valueVolume = obj_Knob2(ctx, images.Knob_2, "##Volume" ..i, valueVolume, params.knobVolume, mouse,
+                            keys)
+                        setParamOnSelectedTracks(fxIndex, "vol", valueVolume, rvv and (keys.altDown or keys.shiftAltDown or keys.ctrlAltDown or keys.ctrlAltShiftDown))
+                        if rvv and not keys.altDown then
+                            reaper.SetMediaTrackInfo_Value(track, "D_VOL", valueVolume)
+                        end
                         reaper.ImGui_SameLine(ctx, 0, 5 * size_modifier);
 
                         -- Pan Knob
-                        _, channel.GUID.pan[i] = obj_Knob2(ctx, images.Knob_Pan, "##Pan" .. i,
-                            channel.GUID.pan[i], params.knobPan, mouse, keys)
-                            reaper.ImGui_SameLine(ctx, 0, 4 * size_modifier);
+                        -- _, channel.GUID.pan[i] = obj_Knob2(ctx, images.Knob_Pan, "##Pan" .. i,
+                        --     channel.GUID.pan[i], params.knobPan, mouse, keys)
+                        
+                        local valuePan = reaper.GetMediaTrackInfo_Value(track, "D_PAN")
+                        local rvp, valuePan = obj_Knob2(ctx, images.Knob_Pan, "##Pan" .. i, valuePan, params.knobPan, mouse,
+                        keys)
+                        setParamOnSelectedTracks(fxIndex, "pan", valuePan, rvp and (keys.altDown or keys.shiftAltDown or keys.ctrlAltDown or keys.ctrlAltShiftDown))
+                        if rvp and not keys.altDown then
+                            reaper.SetMediaTrackInfo_Value(track, "D_PAN", valuePan)
+                        end
+                        reaper.ImGui_SameLine(ctx, 0, 4 * size_modifier);
                         adjustCursorPos(ctx, 1, -10)
                             
                             
@@ -6593,7 +6766,7 @@ function loop()
                                 reaper.ImGui_Dummy(ctx, 11, channel.GUID.expand.spacing[i])
                                 reaper.ImGui_SameLine(ctx)
                                 if channel.GUID.expand.type[i] == 'Velocity' then
-                                    adjustCursorPos(ctx, 6, -20)
+                                    adjustCursorPos(ctx, 8, -20)
                                     obj_VelocitySliders(ctx, actualTrackIndex,
                                         note_positions, note_velocities, mouse, keys, numberOfSliders, sliderWidth,
                                         channel.GUID.expand.spacing[i],
@@ -6602,24 +6775,24 @@ function loop()
                                     -- reaper.ImGui_SameLine(ctx)
                                 end
                                 if channel.GUID.expand.type[i] == 'Pitch' then
-                                    adjustCursorPos(ctx, 6, -20)
+                                    adjustCursorPos(ctx, 8, -20)
                                     obj_PitchSliders(ctx, actualTrackIndex,
                                         note_positions, note_pitches, mouse, keys, numberOfSliders, sliderWidth,
                                         channel.GUID.expand.spacing[i],
                                         x_padding, patternItems, patternSelectSlider, colorValues)
                                 end
                                 if channel.GUID.expand.type[i] == 'Offset' then
-                                    adjustCursorPos(ctx, 6, -20)
+                                    adjustCursorPos(ctx, 8, -20)
                                     obj_OffsetSliders(ctx, actualTrackIndex,
                                         note_positions, note_pitches, mouse, keys, numberOfSliders, sliderWidth,
                                         channel.GUID.expand.spacing[i],
                                         x_padding, patternItems, patternSelectSlider, colorValues)
                                 end
 
-                                adjustCursorPos(ctx, 25, -28)
+                                adjustCursorPos(ctx, 25, -16)
                                 channel.GUID.expand.spacing[i] = obj_ExpandResize(ctx, channel.GUID.expand.spacing[i], i,
                                     mouse, keys, x)
-                                adjustCursorPos(ctx, 0, 10)
+                                adjustCursorPos(ctx, 0, 6)
 
 
                                 -- reaper.ImGui_Dummy(ctx, 1, 1)
