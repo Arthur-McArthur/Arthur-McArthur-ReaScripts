@@ -1368,7 +1368,7 @@ local function getSelectedPatternItemAndMidiItem(trackIndex, patternItems, patte
         local item_length = reaper.GetMediaItemInfo_Value(item, "D_LENGTH")
         local item_end = item_start + item_length
 
-        if nearlyEqual(item_start, pattern_start, float_epsilon) and nearlyEqual(item_end, pattern_end, float_epsilon) then
+        if nearlyEqual(item_start, pattern_start, float_epsilon) then
             local take = reaper.GetMediaItemTake(item, 0)
             if reaper.TakeIsMIDI(take) then
                 return pattern_item, pattern_start, pattern_end, item, track
